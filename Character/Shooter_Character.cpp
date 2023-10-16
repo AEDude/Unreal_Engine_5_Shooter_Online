@@ -11,6 +11,7 @@
 #include "Shooter_Online/Shooter_Components/Combat_Component.h"
 #include "Components/CapsuleComponent.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Shooter_Anim_Instance.h"
 
 // Sets default values
 AShooter_Character::AShooter_Character()
@@ -40,6 +41,12 @@ AShooter_Character::AShooter_Character()
 	GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
 	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
+	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Visibility, ECollisionResponse::ECR_Block);
+	GetCharacterMovement()->RotationRate = FRotator(0.f, 0.f, 850.f);
+
+	Turning_In_Place = ETurning_In_Place::ETIP_Not_Turning;
+	NetUpdateFrequency = 70.f;
+	MinNetUpdateFrequency = 33.f;
 
 }
 
@@ -71,7 +78,7 @@ void AShooter_Character::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ACharacter::Jump);
+	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &AShooter_Character::Jump);
 
 	PlayerInputComponent->BindAxis("Move_Forward", this, &ThisClass::Move_Forward);
 	PlayerInputComponent->BindAxis("Move_Right", this, &ThisClass::Move_Right);
@@ -82,6 +89,10 @@ void AShooter_Character::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	PlayerInputComponent->BindAction("Crouch", IE_Pressed, this, &AShooter_Character::Crouch_Button_Pressed);
 	PlayerInputComponent->BindAction("Aim", IE_Pressed, this, &AShooter_Character::Aim_Button_Pressed);
 	PlayerInputComponent->BindAction("Aim", IE_Released, this, &AShooter_Character::Aim_Button_Released);
+	PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &AShooter_Character::Fire_Button_Pressed);
+	PlayerInputComponent->BindAction("Fire", IE_Released, this, &AShooter_Character::Fire_Button_Pressed);
+	PlayerInputComponent->BindAction("Sprint", IE_Pressed, this, &AShooter_Character::Sprint_Button_Pressed);
+	PlayerInputComponent->BindAction("Sprint", IE_Released, this, &AShooter_Character::Sprint_Button_Released);
 }
 
 void AShooter_Character::PostInitializeComponents()
@@ -90,6 +101,20 @@ void AShooter_Character::PostInitializeComponents()
 	if(Combat)
 	{
 		Combat->Character = this;
+	}
+}
+
+void AShooter_Character::Play_Fire_Montage(bool bAiming)
+{
+	if(Combat == nullptr || Combat->Equipped_Weapon == nullptr) return;
+
+	UAnimInstance* Anim_Instance = GetMesh()->GetAnimInstance();
+	if(Anim_Instance && Fire_Weapon_Montage)
+	{
+		Anim_Instance->Montage_Play(Fire_Weapon_Montage);
+		FName Section_Name;
+		Section_Name = bAiming ? FName("Rifle_Aim") : FName("Rifle_Hip");
+		Anim_Instance->Montage_JumpToSection(Section_Name);
 	}
 }
 
@@ -162,7 +187,7 @@ void AShooter_Character::Crouch_Button_Pressed()
 
 void AShooter_Character::Aim_Button_Pressed()
 {
-	if(Combat)
+	if(Combat && !Combat->bSprinting)
 	{
 		Combat->Set_Aiming(true);
 	}
@@ -170,7 +195,7 @@ void AShooter_Character::Aim_Button_Pressed()
 
 void AShooter_Character::Aim_Button_Released()
 {
-	if(Combat)
+	if(Combat && !Combat->bSprinting)
 	{
 		Combat->Set_Aiming(false);
 	}
@@ -178,7 +203,7 @@ void AShooter_Character::Aim_Button_Released()
 
 void AShooter_Character::Aim_Offset(float DeltaTime)
 {
-	if(Combat && Combat->Equipped_Weapon == nullptr) return;
+	if(Combat && Combat->Equipped_Weapon == nullptr || Combat->bSprinting == true) return;
 	FVector Velocity = GetVelocity();
     Velocity.Z = 0.f;
     float Speed = Velocity.Size();
@@ -189,13 +214,21 @@ void AShooter_Character::Aim_Offset(float DeltaTime)
 		FRotator Current_Aim_Rotation = FRotator(0.f, GetBaseAimRotation().Yaw, 0.f);
 		FRotator Delta_Aim_Rotation = UKismetMathLibrary::NormalizedDeltaRotator(Current_Aim_Rotation, Starting_Aim_Rotation);
 		AO_Yaw = Delta_Aim_Rotation.Yaw;
-		bUseControllerRotationYaw = false;
+		if(Turning_In_Place == ETurning_In_Place::ETIP_Not_Turning)
+		{
+			Interp_AO_Yaw = AO_Yaw;
+		}
+		bUseControllerRotationYaw = true;
+
+		//Turning in place.
+		Turn_In_Place(DeltaTime);
 	}
 	if(Speed > 0.f || bIs_In_Air) // Running or jumping.
 	{
 		Starting_Aim_Rotation = FRotator(0.f, GetBaseAimRotation().Yaw, 0.f);
 		AO_Yaw = 0.f;
 		bUseControllerRotationYaw = true;
+		Turning_In_Place = ETurning_In_Place::ETIP_Not_Turning;
 	}
 
 	AO_Pitch = GetBaseAimRotation().Pitch;
@@ -214,7 +247,86 @@ void AShooter_Character::Aim_Offset(float DeltaTime)
 	}*/
 }
 
-void AShooter_Character::Set_Overlapping_Weapon(AWeapon* Weapon)
+bool AShooter_Character::Is_Sprinting()
+{
+	return (Combat && Combat->bSprinting);
+}
+
+void AShooter_Character::Sprint_Button_Pressed()
+{
+	if(Combat && !Combat->bAiming)
+	{
+		Combat->Set_Sprinting(true);
+	}
+	if(bIsCrouched)
+	{
+		UnCrouch();
+	}
+}
+
+void AShooter_Character::Sprint_Button_Released()
+{
+	if(Combat)
+	{
+		Combat->Set_Sprinting(false);
+
+	}
+}
+
+void AShooter_Character::Jump()
+{
+	if(bIsCrouched)
+	{
+		UnCrouch();
+	}
+	else
+	{
+		Super::Jump();
+	}
+
+}
+
+void AShooter_Character::Fire_Button_Pressed()
+{
+	if(Combat)
+	{
+		Combat->Fire_Button_Pressed(true);
+	}
+}
+
+void AShooter_Character::Fire_Button_Released()
+{
+	if(Combat)
+	{
+		Combat->Fire_Button_Pressed(false);
+	}
+}
+
+void AShooter_Character::Turn_In_Place(float DeltaTime)
+{
+	//UE_LOG(LogTemp, Warning, TEXT("AO_Yaw %f"), AO_Yaw);
+	if(AO_Yaw > 90.f)
+	{
+		Turning_In_Place = ETurning_In_Place::ETIP_Right;
+	}
+	else if (AO_Yaw < -90.f)
+	{
+		Turning_In_Place = ETurning_In_Place::ETIP_Left;
+	}
+	if(Turning_In_Place != ETurning_In_Place::ETIP_Not_Turning)
+	{
+		Interp_AO_Yaw = FMath::FInterpTo(Interp_AO_Yaw, 0.f, DeltaTime, 5.f);
+		AO_Yaw = Interp_AO_Yaw;
+		if(FMath::Abs(AO_Yaw) < 15.f)
+		{
+			Turning_In_Place = ETurning_In_Place::ETIP_Not_Turning;
+			Starting_Aim_Rotation = FRotator(0.f, GetBaseAimRotation().Yaw, 0.f); 
+		}
+	}
+	
+}
+
+void AShooter_Character::Set_Overlapping_Weapon(AWeapon *Weapon)
 {
 	if(Overlapping_Weapon != nullptr)
 		{
@@ -257,6 +369,12 @@ AWeapon *AShooter_Character::Get_Equipped_Weapon()
 {
    if(Combat == nullptr) return nullptr;
 	return Combat->Equipped_Weapon;
+}
+
+FVector AShooter_Character::Get_Hit_Target() const
+{
+    if(Combat == nullptr) return FVector();
+	return Combat->Hit_Target;
 }
 
 #pragma endregion

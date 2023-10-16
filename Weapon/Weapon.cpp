@@ -6,6 +6,10 @@
 #include "Components/WidgetComponent.h"
 #include "Shooter_Online/Character/Shooter_Character.h"
 #include "Net/UnrealNetwork.h"
+#include "Animation/AnimationAsset.h" 
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMeshSocket.h" 
+#include "Bullet_Casing.h"
 // Sets default values
 AWeapon::AWeapon()
 {
@@ -109,5 +113,31 @@ void AWeapon::Show_Pickup_Widget(bool bShow_Widet)
 	if(Pickup_Widget)
 	{
 		Pickup_Widget->SetVisibility(bShow_Widet);
+	}
+}
+
+void AWeapon::Fire(const FVector& Hit_Target)
+{
+	if(Fire_Animation)
+	{
+		Weapon_Mesh->PlayAnimation(Fire_Animation, false);
+	}
+	if(Bullet_Casing_Class)
+	{
+		const USkeletalMeshSocket* Ammo_Eject_Socket = Weapon_Mesh->GetSocketByName(FName("AmmoEject"));
+    	if(Ammo_Eject_Socket)
+    	{
+        	FTransform Socket_Transform = Ammo_Eject_Socket->GetSocketTransform(Weapon_Mesh);
+
+    		UWorld* World = GetWorld();
+        	if(World)
+        	{
+            	World->SpawnActor<ABullet_Casing>(
+            	Bullet_Casing_Class,
+            	Socket_Transform.GetLocation(),
+            	Socket_Transform.GetRotation().Rotator()
+            	);
+        	}
+    	}
 	}
 }

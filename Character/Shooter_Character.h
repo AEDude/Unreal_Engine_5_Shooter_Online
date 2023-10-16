@@ -4,10 +4,12 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "Shooter_Online/Shooter_Types/Turning_In_Place.h"
+#include "Shooter_Online/Interfaces/Crosshairs_Interaction_Interface.h"
 #include "Shooter_Character.generated.h"
 
 UCLASS()
-class SHOOTER_ONLINE_API AShooter_Character : public ACharacter
+class SHOOTER_ONLINE_API AShooter_Character : public ACharacter, public ICrosshairs_Interaction_Interface
 {
 	GENERATED_BODY()
 
@@ -25,6 +27,8 @@ public:
 
 	virtual void PostInitializeComponents() override;
 
+	void Play_Fire_Montage(bool bAiming);
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -38,6 +42,11 @@ protected:
 	void Aim_Button_Pressed();
 	void Aim_Button_Released();
 	void Aim_Offset(float DeltaTime);
+	void Sprint_Button_Pressed();
+	void Sprint_Button_Released();
+	virtual void Jump() override;
+	void Fire_Button_Pressed();
+	void Fire_Button_Released();
 
 
 private:
@@ -64,16 +73,26 @@ private:
 	void Server_Equip_Button_Pressed();
 
 	float AO_Yaw;
+	float Interp_AO_Yaw;
 	float AO_Pitch;
 	FRotator Starting_Aim_Rotation;
+
+	ETurning_In_Place Turning_In_Place;
+	void Turn_In_Place(float DeltaTime);
+
+	UPROPERTY(EditAnywhere, Category = Combat)
+	class UAnimMontage* Fire_Weapon_Montage;
 
 public:	
 
 	void Set_Overlapping_Weapon(AWeapon* Weapon);
 	bool Is_Weapon_Equipped();
 	bool Is_Aiming();
+	bool Is_Sprinting();
 	FORCEINLINE float Get_AO_Yaw() const { return AO_Yaw;}
 	FORCEINLINE float Get_AO_Pitch() const { return AO_Pitch; }
 	AWeapon* Get_Equipped_Weapon();
-
+	FORCEINLINE ETurning_In_Place Get_Turning_In_Place() const { return Turning_In_Place; }
+	FVector Get_Hit_Target() const;
+	FORCEINLINE UCameraComponent* Get_Follow_Camera() const { return Follow_Camera; }
 };

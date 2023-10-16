@@ -29,6 +29,36 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifetimeProps) const override;
 	void Show_Pickup_Widget(bool bShow_Widget);
+	virtual void Fire(const FVector& Hit_Target);
+
+	/**
+	* Textures for the weapon crosshairs
+	*/
+
+	UPROPERTY(EditAnywhere, Category = Crosshairs)
+	class UTexture2D* Crosshairs_Center;
+
+	UPROPERTY(EditAnywhere, Category = Crosshairs)
+	UTexture2D* Crosshairs_Top;
+
+	UPROPERTY(EditAnywhere, Category = Crosshairs)
+	UTexture2D* Crosshairs_Bottom;
+
+	UPROPERTY(EditAnywhere, Category = Crosshairs)
+	UTexture2D* Crosshairs_Left;
+
+	UPROPERTY(EditAnywhere, Category = Crosshairs)
+	UTexture2D* Crosshairs_Right;
+
+	/**
+	 * Zoomed Field of View while aiming
+	*/
+
+	UPROPERTY(EditAnywhere)
+	float Zoomed_FOV = 33.f;
+
+	UPROPERTY(EditAnywhere)
+	float Zoom_Interp_Speed = 25.f;
 
 protected:
 	// Called when the game starts or when spawned
@@ -66,14 +96,21 @@ private:
 	UFUNCTION()
 	void OnRep_Weapon_State();
 	
-	UPROPERTY(EditAnywhere, Category = "Weapon_Properties")
+	UPROPERTY(EditAnywhere, Category = "Weapon Properties")
 	class UWidgetComponent* Pickup_Widget;
+
+	UPROPERTY(EditAnywhere, Category = "Weapon Properties")
+	class UAnimationAsset* Fire_Animation;
+
+	UPROPERTY(EditAnywhere)
+	TSubclassOf<class ABullet_Casing> Bullet_Casing_Class;
 
 public:	
 
-	FORCEINLINE void Set_Weapon_State(EWeaponState State);
+	void Set_Weapon_State(EWeaponState State);
 	FORCEINLINE USphereComponent* Get_Area_Sphere() const { return Area_Sphere; }
 	FORCEINLINE USkeletalMeshComponent* Get_Weapon_Mesh() const { return Weapon_Mesh; }
-
+	FORCEINLINE float Get_Zoomed_FOV() const { return Zoomed_FOV; }
+	FORCEINLINE float Get_Zoom_Interp_Speed() const { return Zoom_Interp_Speed; }
 
 };
