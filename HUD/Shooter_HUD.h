@@ -13,11 +13,21 @@ struct FHUDPackage
 
 public:
 
+	UPROPERTY()
 	class UTexture2D* Crosshair_Center;
+	
+	UPROPERTY()
 	UTexture2D* Crosshair_Top;
+	
+	UPROPERTY()
 	UTexture2D* Crosshair_Bottom;
+	
+	UPROPERTY()
 	UTexture2D* Crosshair_Left;
+	
+	UPROPERTY()
 	UTexture2D* Crosshair_Right;
+	
 	float Crosshair_Spread;
 	FLinearColor Crosshairs_Color;
 
@@ -35,6 +45,25 @@ public:
 
 	virtual void DrawHUD() override;
 
+	UPROPERTY(EditAnywhere, Category = "Player Stats")
+	TSubclassOf<class UUserWidget> Character_Overlay_Class;
+	void Add_Character_Overlay();
+
+	UPROPERTY()
+	class UCharacter_Overlay* Character_Overlay;
+
+	UPROPERTY(EditAnywhere, Category = "Announcements")
+	TSubclassOf<class UUserWidget> Announcement_Class;
+
+	UPROPERTY()
+	class UAnnouncement* Announcement;
+
+	void Add_Announcement();
+
+protected:
+
+	virtual void BeginPlay() override;
+	
 private:
 
 	FHUDPackage HUD_Package;

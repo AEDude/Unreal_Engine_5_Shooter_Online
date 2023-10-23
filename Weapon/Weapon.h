@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Weapon_Types.h"
 #include "Weapon.generated.h"
 
 UENUM(BlueprintType)
@@ -28,8 +29,12 @@ public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifetimeProps) const override;
+	virtual void OnRep_Owner() override;
+	void Set_HUD_Ammo();
 	void Show_Pickup_Widget(bool bShow_Widget);
 	virtual void Fire(const FVector& Hit_Target);
+	void Drop_Weapons();
+	void Add_Ammo(int32 Ammo_To_Add);
 
 	/**
 	* Textures for the weapon crosshairs
@@ -60,6 +65,17 @@ public:
 	UPROPERTY(EditAnywhere)
 	float Zoom_Interp_Speed = 25.f;
 
+	/**
+	 * Automatic Firing Settings
+	*/
+	UPROPERTY(EditAnywhere, Category = "Combat")
+	float Fire_Delay = .1f;
+
+	UPROPERTY(EditAnywhere, Category = "Combat")
+	bool bAutomatic = true;
+
+	UPROPERTY(EditAnywhere)
+	class USoundCue* Equip_Sound; 
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -105,6 +121,26 @@ private:
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<class ABullet_Casing> Bullet_Casing_Class;
 
+	UPROPERTY(EditAnywhere, ReplicatedUsing = OnRep_Ammo)
+	int32 Ammo;
+
+	UPROPERTY(EditAnywhere)
+	int32 Magazine_Capacity;
+
+	void Spend_Round();
+
+	UFUNCTION()
+	void OnRep_Ammo();
+
+	UPROPERTY()
+	class AShooter_Character* Shooter_Owner_Character;
+
+	UPROPERTY()
+	class AShooter_Player_Controller* Shooter_Owner_Controller;
+
+	UPROPERTY(EditAnywhere)
+	EWeapon_Type Weapon_Type;
+
 public:	
 
 	void Set_Weapon_State(EWeaponState State);
@@ -112,5 +148,9 @@ public:
 	FORCEINLINE USkeletalMeshComponent* Get_Weapon_Mesh() const { return Weapon_Mesh; }
 	FORCEINLINE float Get_Zoomed_FOV() const { return Zoomed_FOV; }
 	FORCEINLINE float Get_Zoom_Interp_Speed() const { return Zoom_Interp_Speed; }
+	bool Is_Empty();
+	FORCEINLINE EWeapon_Type Get_Weapon_Type() const { return Weapon_Type; }
+	FORCEINLINE int32 Get_Ammo() const { return Ammo; }
+	FORCEINLINE int32 Get_Magazine_Capacity() const { return Magazine_Capacity; }
 
-};
+	};

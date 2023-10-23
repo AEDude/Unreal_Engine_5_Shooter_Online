@@ -6,6 +6,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Shooter_Online/Weapon/Weapon.h"
+#include "Shooter_Online/Shooter_Types/Combat_State.h"
 
 void UShooter_Anim_Instance::NativeInitializeAnimation()
 {
@@ -36,6 +37,8 @@ void UShooter_Anim_Instance::NativeUpdateAnimation(float DeltaTime)
     bAiming = Shooter_Character->Is_Aiming();
     bSprinting = Shooter_Character->Is_Sprinting();
     Turning_In_Place = Shooter_Character->Get_Turning_In_Place();
+    bRotate_Root_Bone = Shooter_Character->Should_Rotate_Root_Bone();
+    bEliminated = Shooter_Character->Is_Eliminated();
 
     // Offset Yaw for Strafing
     FRotator Aim_Rotation = Shooter_Character->GetBaseAimRotation();
@@ -83,5 +86,9 @@ void UShooter_Anim_Instance::NativeUpdateAnimation(float DeltaTime)
             DrawDebugLine(GetWorld(), Muzzle_Tip_Transform.GetLocation(), Shooter_Character->Get_Hit_Target(), FColor::Green);*/
         }
     }
+
+    bUse_FABRIK = Shooter_Character->Get_Combat_State() != ECombat_State::ECS_Reloading;
+    bUse_Aim_Offsets = Shooter_Character->Get_Combat_State() != ECombat_State::ECS_Reloading;
+    bTransform_Right_Hand = Shooter_Character->Get_Combat_State() != ECombat_State::ECS_Reloading;
 }
 

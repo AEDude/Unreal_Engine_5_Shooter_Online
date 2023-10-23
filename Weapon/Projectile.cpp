@@ -3,12 +3,15 @@
 
 #include "Projectile.h"
 #include "Components/BoxComponent.h"
-#include "GameFramework/ProjectileMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Particles/ParticleSystemComponent.h"
 #include "Shooter_Online\Character\Shooter_Character.h"
 #include "Particles/ParticleSystem.h"
 #include "Sound/SoundCue.h"
+#include "Shooter_Online/Character/Shooter_Character.h"
+#include "Shooter_Online/Shooter_Online.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraComponent.h"
 
 // Sets default values
 AProjectile::AProjectile()
@@ -24,9 +27,8 @@ AProjectile::AProjectile()
 	Collision_Box->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
 	Collision_Box->SetCollisionResponseToChannel(ECollisionChannel::ECC_Visibility, ECollisionResponse::ECR_Block);
 	Collision_Box->SetCollisionResponseToChannel(ECollisionChannel::ECC_WorldStatic, ECollisionResponse::ECR_Block);
-
-	Projectile_Movement_Component = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("Projectile Movement Component"));
-	Projectile_Movement_Component->bRotationFollowsVelocity = true;
+	Collision_Box->SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Block);
+	Collision_Box->SetCollisionResponseToChannel(ECC_Skeletal_Mesh, ECollisionResponse::ECR_Block);
 }
 
 // Called when the game starts or when spawned
@@ -51,6 +53,21 @@ void AProjectile::BeginPlay()
 	}
 }
 
+void AProjectile::Start_Destroy_Timer()
+{
+	GetWorldTimerManager().SetTimer(
+        Destroy_Timer,
+        this,
+        &AProjectile::Destroy_Timer_Finished,
+        Destroy_Time
+    );
+}
+
+void AProjectile::Destroy_Timer_Finished()
+{
+    Destroy();
+}
+
 void AProjectile::On_Hit(UPrimitiveComponent *Hit_Comp, AActor *Other_Actor, UPrimitiveComponent *Other_Comp, FVector Normal_Impulse, const FHitResult &Hit)
 {
 	Destroy();
@@ -72,6 +89,48 @@ void AProjectile::Multicast_On_Hit_Implementation(bool bCharacter_Hit)
 	Impact_Particles = bCharacter_Hit ? Impact_Character_Particles : Impact_Obstacle_Particles;
 
 	Destroy();
+}
+
+void AProjectile::Spawn_Trail_System()
+{
+	if(Trail_System)
+    {
+        Trail_System_Component = UNiagaraFunctionLibrary::SpawnSystemAttached(
+            Trail_System,
+            GetRootComponent(),
+            FName(),
+            GetActorLocation(),
+            GetActorRotation(),
+            EAttachLocation::KeepWorldPosition,
+            false
+        );
+    }
+
+}
+
+void AProjectile::Explode_Damage()
+{
+    APawn* Firing_Pawn = GetInstigator();
+    if(Firing_Pawn && HasAuthority())
+    {
+        AController* Firing_Controller = Firing_Pawn->GetController();
+        if(Firing_Controller)
+        {
+            UGameplayStatics::ApplyRadialDamageWithFalloff(
+                this, //World Context Object
+                Damage, //Base Damage
+                15.f, //Minimum Damage
+                GetActorLocation(), //Origin of damage
+                Damage_Inner_Radius, // Damage inner radius 
+                Damage_Outer_Radius, // Damage outer radius
+                1.f, // Damage falloff
+                UDamageType::StaticClass(), //Damage Type Class
+                TArray<AActor*>(), // Empty Array of Ignore Actors
+                this, // Damage causer
+                Firing_Controller //Instigator controller
+            );
+        }
+    }
 }
 
 // Called every frame

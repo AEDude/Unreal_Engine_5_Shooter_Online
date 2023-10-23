@@ -10,12 +10,14 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMeshSocket.h" 
 #include "Bullet_Casing.h"
+#include "Shooter_Online/Player_Controller/Shooter_Player_Controller.h"
 // Sets default values
 AWeapon::AWeapon()
 {
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
+	SetReplicateMovement(true);
 
 	Weapon_Mesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Weapon_Mesh"));
 	SetRootComponent(Weapon_Mesh);
@@ -66,6 +68,7 @@ void AWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifetimeP
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(AWeapon, Weapon_State);
+	DOREPLIFETIME(AWeapon, Ammo);
 }
 
 void AWeapon::On_Sphere_Overlap(UPrimitiveComponent *Overlapped_Component, AActor *Other_Actor, UPrimitiveComponent *Other_Comp, int32 Other_Body_Index, bool bFrom_Sweep, const FHitResult &Sweep_Result)
@@ -86,6 +89,45 @@ void AWeapon::On_Sphere_End_Overlap(UPrimitiveComponent *Overlapped_Component, A
 	}
 }
 
+void AWeapon::Set_HUD_Ammo()
+{
+	Shooter_Owner_Character = Shooter_Owner_Character == nullptr ? Cast<AShooter_Character>(GetOwner()) : Shooter_Owner_Character;
+	if(Shooter_Owner_Character)
+	{
+		Shooter_Owner_Controller = Shooter_Owner_Controller == nullptr ? Cast<AShooter_Player_Controller>(Shooter_Owner_Character->Controller) : Shooter_Owner_Controller;
+		if(Shooter_Owner_Controller)
+		{
+			Shooter_Owner_Controller->Set_HUD_Weapon_Ammo(Ammo);
+		}
+	}
+}
+
+void AWeapon::Spend_Round()
+{
+	Ammo = FMath::Clamp(Ammo -1, 0, Magazine_Capacity);
+	Set_HUD_Ammo();
+}
+
+void AWeapon::OnRep_Ammo()
+{
+	Shooter_Owner_Character = Shooter_Owner_Character == nullptr ? Cast<AShooter_Character>(GetOwner()) : Shooter_Owner_Character;
+	Set_HUD_Ammo();
+}
+
+void AWeapon::OnRep_Owner()
+{
+	Super::OnRep_Owner();
+	if(Owner == nullptr)
+	{	
+		Shooter_Owner_Character = nullptr;
+		Shooter_Owner_Controller = nullptr;
+	}
+	else
+	{
+		Set_HUD_Ammo();
+	}
+}
+
 void AWeapon::Set_Weapon_State(EWeaponState State)
 {
 	Weapon_State = State;
@@ -94,6 +136,21 @@ void AWeapon::Set_Weapon_State(EWeaponState State)
 	case EWeaponState::EWS_Equipped:
 		Show_Pickup_Widget(false);
 		Area_Sphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Weapon_Mesh->SetSimulatePhysics(false);
+		Weapon_Mesh->SetEnableGravity(false);
+		Weapon_Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Weapon_Mesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
+		break;
+
+	case EWeaponState::EWS_Dropped:
+		if(HasAuthority())
+		{
+			Area_Sphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		}
+		Weapon_Mesh->SetSimulatePhysics(true);
+		Weapon_Mesh->SetEnableGravity(true);
+		Weapon_Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		Weapon_Mesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
 		break;
 	}
 }
@@ -104,6 +161,17 @@ void AWeapon::OnRep_Weapon_State()
 	{
 	case EWeaponState::EWS_Equipped:
 		Show_Pickup_Widget(false);
+		Weapon_Mesh->SetSimulatePhysics(false);
+		Weapon_Mesh->SetEnableGravity(false);
+		Weapon_Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Weapon_Mesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
+		break;
+
+		case EWeaponState::EWS_Dropped:
+		Weapon_Mesh->SetSimulatePhysics(true);
+		Weapon_Mesh->SetEnableGravity(true);
+		Weapon_Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		Weapon_Mesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
 		break;
 	}
 }
@@ -140,4 +208,27 @@ void AWeapon::Fire(const FVector& Hit_Target)
         	}
     	}
 	}
+	Spend_Round();
+}
+
+void AWeapon::Drop_Weapons()
+{
+	Set_Weapon_State(EWeaponState::EWS_Dropped);
+	FDetachmentTransformRules Detach_Rules(EDetachmentRule::KeepWorld, true);
+	Weapon_Mesh->DetachFromComponent(Detach_Rules);
+	SetOwner(nullptr);
+	Shooter_Owner_Character = nullptr;
+	Shooter_Owner_Controller = nullptr;
+
+}
+
+void AWeapon::Add_Ammo(int32 Ammo_To_Add)
+{
+	Ammo = FMath::Clamp(Ammo - Ammo_To_Add, 0, Magazine_Capacity);
+	Set_HUD_Ammo();
+}
+
+bool AWeapon::Is_Empty()
+{
+    return Ammo <= 0;
 }

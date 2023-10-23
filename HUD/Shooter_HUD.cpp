@@ -2,6 +2,35 @@
 
 
 #include "Shooter_HUD.h"
+#include "GameFramework/PlayerController.h"
+#include "Character_Overlay.h"
+#include "Announcement.h"
+
+
+void AShooter_HUD::BeginPlay()
+{
+    Super::BeginPlay();
+}
+
+void AShooter_HUD::Add_Character_Overlay()
+{
+   APlayerController* Player_Controller = GetOwningPlayerController();
+   if(Player_Controller && Character_Overlay_Class)
+   {
+        Character_Overlay = CreateWidget<UCharacter_Overlay>(Player_Controller, Character_Overlay_Class);
+        Character_Overlay->AddToViewport();
+   } 
+}
+
+void AShooter_HUD::Add_Announcement()
+{
+    APlayerController* Player_Controller = GetOwningPlayerController();
+    if(Player_Controller && Announcement_Class && Announcement == nullptr)
+    {
+        Announcement = CreateWidget<UAnnouncement>(Player_Controller, Announcement_Class);
+        Announcement->AddToViewport();
+    } 
+}
 
 void AShooter_HUD::DrawHUD()
 {
