@@ -11,6 +11,8 @@
 #include "Engine/SkeletalMeshSocket.h" 
 #include "Bullet_Casing.h"
 #include "Shooter_Online/Player_Controller/Shooter_Player_Controller.h"
+#include "Shooter_Online/Shooter_Components/Combat_Component.h"
+
 // Sets default values
 AWeapon::AWeapon()
 {
@@ -25,6 +27,10 @@ AWeapon::AWeapon()
 	Weapon_Mesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Block);
 	Weapon_Mesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Ignore);
 	Weapon_Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	Weapon_Mesh->SetCustomDepthStencilValue(CUSTOM_DEPTH_TAN);
+	Weapon_Mesh->MarkRenderStateDirty();
+	Eneble_Custom_Depth(true);
 
 	Area_Sphere = CreateDefaultSubobject<USphereComponent>(TEXT("Area_Sphere"));
 	Area_Sphere->SetupAttachment(RootComponent);
@@ -61,6 +67,14 @@ void AWeapon::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+}
+
+void AWeapon::Eneble_Custom_Depth(bool bEneble)
+{
+	if(Weapon_Mesh)
+	{
+		Weapon_Mesh->SetRenderCustomDepth(bEneble);
+	}
 }
 
 void AWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifetimeProps) const
@@ -111,6 +125,10 @@ void AWeapon::Spend_Round()
 void AWeapon::OnRep_Ammo()
 {
 	Shooter_Owner_Character = Shooter_Owner_Character == nullptr ? Cast<AShooter_Character>(GetOwner()) : Shooter_Owner_Character;
+	if(Shooter_Owner_Character && Shooter_Owner_Character->Get_Combat() && Is_Full())
+	{
+		Shooter_Owner_Character->Get_Combat()->Jump_To_Shotgun_End();
+	}
 	Set_HUD_Ammo();
 }
 
@@ -140,6 +158,8 @@ void AWeapon::Set_Weapon_State(EWeaponState State)
 		Weapon_Mesh->SetEnableGravity(false);
 		Weapon_Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Weapon_Mesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
+
+		Eneble_Custom_Depth(false);
 		break;
 
 	case EWeaponState::EWS_Dropped:
@@ -151,6 +171,10 @@ void AWeapon::Set_Weapon_State(EWeaponState State)
 		Weapon_Mesh->SetEnableGravity(true);
 		Weapon_Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		Weapon_Mesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
+
+		Weapon_Mesh->SetCustomDepthStencilValue(CUSTOM_DEPTH_TAN);
+		Weapon_Mesh->MarkRenderStateDirty();
+		Eneble_Custom_Depth(true);
 		break;
 	}
 }
@@ -165,6 +189,8 @@ void AWeapon::OnRep_Weapon_State()
 		Weapon_Mesh->SetEnableGravity(false);
 		Weapon_Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Weapon_Mesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
+
+		Eneble_Custom_Depth(true);
 		break;
 
 		case EWeaponState::EWS_Dropped:
@@ -172,6 +198,10 @@ void AWeapon::OnRep_Weapon_State()
 		Weapon_Mesh->SetEnableGravity(true);
 		Weapon_Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		Weapon_Mesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
+		
+		Weapon_Mesh->SetCustomDepthStencilValue(CUSTOM_DEPTH_TAN);
+		Weapon_Mesh->MarkRenderStateDirty();
+		Eneble_Custom_Depth(true);
 		break;
 	}
 }
@@ -231,4 +261,9 @@ void AWeapon::Add_Ammo(int32 Ammo_To_Add)
 bool AWeapon::Is_Empty()
 {
     return Ammo <= 0;
+}
+
+bool AWeapon::Is_Full()
+{
+	return Ammo == Magazine_Capacity;
 }

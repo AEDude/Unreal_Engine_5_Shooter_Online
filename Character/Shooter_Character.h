@@ -34,6 +34,8 @@ public:
 
 	void Play_Eliminated_Montage();
 
+	void Play_Throw_Grenade_Montage();
+
 	virtual void OnRep_ReplicatedMovement() override;
 
 	void Ragdoll_On_Death();
@@ -47,12 +49,11 @@ public:
 
 	UPROPERTY(Replicated)
 	bool bDisable_Gameplay = false;
-
-	UPROPERTY()
-	class AShooter_Player_State* Shooter_Player_State;
 	
 	UFUNCTION(BlueprintImplementableEvent)
 	void Show_Sniper_Scope_Widget(bool bShow_Scope);
+
+
 
 protected:
 	// Called when the game starts or when spawned
@@ -77,6 +78,7 @@ protected:
 	void Fire_Button_Pressed();
 	void Fire_Button_Released();
 	void Play_Hit_React_Montage();
+	void Grenade_Button_Pressed();
 	
 	UFUNCTION()
 	void Recieve_Damage(AActor* Damaged_Actor, float Damage, const UDamageType* Damage_Type, class AController* Instigator_Controller, AActor* Damage_Causer);
@@ -132,7 +134,8 @@ private:
 	UPROPERTY(EditAnywhere, Category = Combat)
 	UAnimMontage* Eliminated_Montage;
 
-
+	UPROPERTY(EditAnywhere, Category = Combat)
+	UAnimMontage* Throw_Grenade_Montage;
 
 	
 	void Hide_Camera_When_Character_Is_Close();
@@ -172,6 +175,15 @@ private:
 
 	void Eliminated_Timer_Finished();
 
+	UPROPERTY()
+	class AShooter_Player_State* Shooter_Player_State;
+
+	/**
+	 * Grenade
+	*/
+
+	UPROPERTY(VisibleAnywhere)
+	UStaticMeshComponent* Attached_Grenade;
 
 public:	
 
@@ -192,4 +204,6 @@ public:
 	ECombat_State Get_Combat_State() const;
 	FORCEINLINE UCombat_Component* Get_Combat() const { return Combat; }
 	FORCEINLINE bool Get_Disable_Gameplay() const { return bDisable_Gameplay; }
+	FORCEINLINE UAnimMontage* Get_Reload_Montage() const {return Reload_Montage;}
+	FORCEINLINE UStaticMeshComponent* Get_Attached_Grenade() const { return Attached_Grenade; }
 };

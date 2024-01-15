@@ -50,6 +50,10 @@ AShooter_Character::AShooter_Character()
 
 	SpawnCollisionHandlingMethod = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
+	Attached_Grenade = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Attached_Grenade"));
+	Attached_Grenade->SetupAttachment(GetMesh(), FName("Grenade_Socket"));
+	Attached_Grenade->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
 	GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
 	GetMesh()->SetCollisionObjectType(ECC_Skeletal_Mesh);
@@ -164,6 +168,11 @@ void AShooter_Character::BeginPlay()
 		OnTakeAnyDamage.AddDynamic(this, &AShooter_Character::Recieve_Damage);
 	}
 	
+	if(Attached_Grenade)
+	{
+		Attached_Grenade->SetVisibility(false);
+	}
+	
 }
 
 // Called every frame
@@ -195,7 +204,8 @@ void AShooter_Character::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	PlayerInputComponent->BindAction("Aim", IE_Released, this, &AShooter_Character::Aim_Button_Released);
 	PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &AShooter_Character::Fire_Button_Pressed);
 	PlayerInputComponent->BindAction("Fire", IE_Released, this, &AShooter_Character::Fire_Button_Released);
-	PlayerInputComponent->BindAction("Reload",IE_Pressed, this, &AShooter_Character::Reload_Button_Pressed);
+	PlayerInputComponent->BindAction("Reload", IE_Pressed, this, &AShooter_Character::Reload_Button_Pressed);
+	PlayerInputComponent->BindAction("Throw_Grenade", IE_Released, this, &AShooter_Character::Grenade_Button_Pressed);
 	PlayerInputComponent->BindAction("Sprint", IE_Pressed, this, &AShooter_Character::Sprint_Button_Pressed);
 	PlayerInputComponent->BindAction("Sprint", IE_Released, this, &AShooter_Character::Sprint_Button_Released);
 }
@@ -275,6 +285,14 @@ void AShooter_Character::Play_Hit_React_Montage()
 	}
 }
 
+void AShooter_Character:: Grenade_Button_Pressed()
+{
+	if(Combat)
+	{
+		Combat->Throw_Grenade();
+	}
+}
+
 void AShooter_Character::Play_Eliminated_Montage()
 {
 	UAnimInstance* Anim_Instance = GetMesh()->GetAnimInstance();
@@ -284,6 +302,15 @@ void AShooter_Character::Play_Eliminated_Montage()
 		/*FName Section_Name;
 		Section_Name = bAiming ? FName("Rifle_Aim") : FName("Rifle_Hip");
 		Anim_Instance->Montage_JumpToSection(Section_Name);*/
+	}
+}
+
+void AShooter_Character::Play_Throw_Grenade_Montage()
+{
+	UAnimInstance* Anim_Instance = GetMesh()->GetAnimInstance();
+	if(Anim_Instance && Throw_Grenade_Montage)
+	{
+		Anim_Instance->Montage_Play(Throw_Grenade_Montage);
 	}
 }
 

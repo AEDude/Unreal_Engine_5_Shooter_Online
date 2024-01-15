@@ -76,6 +76,12 @@ public:
 
 	UPROPERTY(EditAnywhere)
 	class USoundCue* Equip_Sound; 
+
+	/**
+	 * Eneble or disbale custom depth (color outline)
+	*/
+	void Eneble_Custom_Depth(bool bEneble);
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -149,6 +155,7 @@ public:
 	FORCEINLINE float Get_Zoomed_FOV() const { return Zoomed_FOV; }
 	FORCEINLINE float Get_Zoom_Interp_Speed() const { return Zoom_Interp_Speed; }
 	bool Is_Empty();
+	bool Is_Full();
 	FORCEINLINE EWeapon_Type Get_Weapon_Type() const { return Weapon_Type; }
 	FORCEINLINE int32 Get_Ammo() const { return Ammo; }
 	FORCEINLINE int32 Get_Magazine_Capacity() const { return Magazine_Capacity; }
