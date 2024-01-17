@@ -47,6 +47,8 @@ public:
 	UFUNCTION(Server, Reliable)
 	void Server_Launch_Grenade(const FVector_NetQuantize& Target);
 
+	void Pickup_Ammo(EWeapon_Type Weapon_Type, int32 Ammo_Amount);
+
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
@@ -204,26 +206,29 @@ private:
 
 	TMap<EWeapon_Type, int32> Carried_Ammo_Map;
 
-	UPROPERTY(EditAnywhere)
-	int32 Starting_Pistol_Ammo = 0;
+	UPROPERTY(EditDefaultsOnly)
+	int32 Max_Carried_Ammo = 700;
 
-	UPROPERTY(EditAnywhere)
-	int32 Starting_Submachine_Gun_Ammo = 0;
+	UPROPERTY(EditDefaultsOnly)
+	int32 Starting_Pistol_Ammo = 12;
 
-	UPROPERTY(EditAnywhere)
-	int32 Starting_Assult_Rifle_Ammo = 0;
+	UPROPERTY(EditDefaultsOnly)
+	int32 Starting_Submachine_Gun_Ammo = 28;
 
-	UPROPERTY(EditAnywhere)
-	int32 Starting_Shotgun_Ammo = 0;
+	UPROPERTY(EditDefaultsOnly)
+	int32 Starting_Assult_Rifle_Ammo = 32;
 
-	UPROPERTY(EditAnywhere)
-	int32 Starting_Sniper_Rifle_Ammo = 0;
+	UPROPERTY(EditDefaultsOnly)
+	int32 Starting_Shotgun_Ammo = 8;
 
-	UPROPERTY(EditAnywhere)
-	int32 Starting_Grenade_Launcher_Ammo = 0;
+	UPROPERTY(EditDefaultsOnly)
+	int32 Starting_Sniper_Rifle_Ammo = 12;
 
-	UPROPERTY(EditAnywhere)
-	int32 Starting_Rocket_Launcher_Ammo = 0;
+	UPROPERTY(EditDefaultsOnly)
+	int32 Starting_Grenade_Launcher_Ammo = 4;
+
+	UPROPERTY(EditDefaultsOnly)
+	int32 Starting_Rocket_Launcher_Ammo = 3;
 
 	void Initialize_Carried_Ammo();
 
@@ -236,9 +241,21 @@ private:
 	void Update_Ammo_Values();
 
 	void Update_Shotgun_Ammo_Values();
+
+	UPROPERTY(ReplicatedUsing = On_Rep_Grenades)
+	int32 Grenades = 3;
+
+	UPROPERTY(EditDefaultsOnly)
+	int32 Maximum_Grenades = 7;
+
+	UFUNCTION()
+	void On_Rep_Grenades();
+
+	void Update_HUD_Grenades();
 	
 
 public:	
 
 	FORCEINLINE ECombat_State Get_Combat_State() const { return Combat_State; }
+	FORCEINLINE int32 Get_Grenades() const { return Grenades; }
 };

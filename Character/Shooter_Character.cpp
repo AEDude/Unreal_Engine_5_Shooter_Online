@@ -9,6 +9,7 @@
 #include "Net/UnrealNetwork.h"
 #include "Shooter_Online/Weapon//Weapon.h"
 #include "Shooter_Online/Shooter_Components/Combat_Component.h"
+#include "Shooter_Online/Shooter_Components/Buff_Component.h"
 #include "Components/CapsuleComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Shooter_Anim_Instance.h"
@@ -47,6 +48,9 @@ AShooter_Character::AShooter_Character()
 
 	Combat = CreateDefaultSubobject<UCombat_Component>(TEXT("Combat_Component"));
 	Combat->SetIsReplicated(true);
+
+	Buff = CreateDefaultSubobject<UBuff_Component>(TEXT("Buff_Component"));
+	Buff->SetIsReplicated(true);
 
 	SpawnCollisionHandlingMethod = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
@@ -217,6 +221,10 @@ void AShooter_Character::PostInitializeComponents()
 	{
 		Combat->Character = this;
 	}
+	if(Buff)
+	{
+		Buff->Character = this;
+	}
 }
 
 void AShooter_Character::Play_Fire_Montage(bool bAiming)
@@ -323,6 +331,8 @@ void AShooter_Character::Ragdoll_On_Death()
 
 void AShooter_Character::Recieve_Damage(AActor *Damaged_Actor, float Damage, const UDamageType *Damage_Type, AController *Instigator_Controller, AActor *Damage_Causer)
 {
+	if(bEliminated) return;
+	
 	Health = FMath::Clamp(Health - Damage, 0.f, Max_Health);
 	Update_HUD_Health();
 	Play_Hit_React_Montage();

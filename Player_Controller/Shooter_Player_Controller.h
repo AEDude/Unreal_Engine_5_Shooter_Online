@@ -25,6 +25,7 @@ public:
 	void Set_HUD_Carried_Ammo(int32 Ammo);
 	void Set_HUD_Match_Countdown(float Countdown_Time); 
 	void Set_HUD_Announcement_Countdown(float Countdown_Time);
+	void Set_HUD_Grenades(int32 Grenades);
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void Tick(float DeltaTime) override;
 
@@ -104,6 +105,7 @@ private:
 	float HUD_MAX_Health;
 	float HUD_Score;
 	int32 HUD_Deaths;
+	int32 HUD_Grenades;
 	
 	
 };

@@ -35,6 +35,9 @@ public:
 
 	UPROPERTY(meta = (BindWidget))
 	UTextBlock* Match_Countdown_Text;
+
+	UPROPERTY(meta = (BindWidget))
+	UTextBlock* Grenades_Text;
 	
 	
 };

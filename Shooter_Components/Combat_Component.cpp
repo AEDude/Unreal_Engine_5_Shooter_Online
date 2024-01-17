@@ -43,6 +43,7 @@ void UCombat_Component::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &Ou
 	DOREPLIFETIME(UCombat_Component, bSprinting);
 	DOREPLIFETIME_CONDITION(UCombat_Component, Carried_Ammo, COND_OwnerOnly);
 	DOREPLIFETIME(UCombat_Component, Combat_State);
+	DOREPLIFETIME(UCombat_Component, Grenades);
 }
 
 // Called when the game starts
@@ -628,6 +629,11 @@ void UCombat_Component::Jump_To_Shotgun_End()
 	} 
 }
 
+void UCombat_Component::On_Rep_Grenades()
+{
+	Update_HUD_Grenades();
+}
+
 void UCombat_Component::Throw_Grenade_Finished()
 {
 	Combat_State = ECombat_State::ECS_Unoccupied;
@@ -664,6 +670,19 @@ void UCombat_Component::Server_Launch_Grenade_Implementation(const FVector_NetQu
 		}
 	}
 }
+
+ void UCombat_Component::Pickup_Ammo(EWeapon_Type Weapon_Type, int32 Ammo_Amount)
+ {
+	if(Carried_Ammo_Map.Contains(Weapon_Type))
+	{
+		Carried_Ammo_Map[Weapon_Type] = FMath::Clamp(Carried_Ammo_Map[Weapon_Type] + Ammo_Amount, 0, Max_Carried_Ammo);
+		Update_Carried_Ammo();
+	}
+	if(Equipped_Weapon && Equipped_Weapon->Is_Empty() && Equipped_Weapon->Get_Weapon_Type() == Weapon_Type)
+	{
+		Reload();
+	}
+ }
 
 void UCombat_Component::OnRep_Combat_State()
 {
@@ -710,6 +729,8 @@ int32 UCombat_Component::Amount_To_Reload()
 
 void UCombat_Component::Throw_Grenade()
 {
+	if(Grenades == 0) return;
+
 	if(Combat_State != ECombat_State::ECS_Unoccupied || Equipped_Weapon == nullptr) return;
 
 	Combat_State = ECombat_State::ECS_Throwing_Grenade;
@@ -724,16 +745,35 @@ void UCombat_Component::Throw_Grenade()
 	{
 		Server_Throw_Grenade();
 	}
+	if(Character && Character->HasAuthority())
+	{
+		Grenades = FMath::Clamp(Grenades -1, 0, Maximum_Grenades);
+		Update_HUD_Grenades();
+	}
 }
 
 void UCombat_Component::Server_Throw_Grenade_Implementation()
 {
+	if(Grenades == 0) return;
+
 	Combat_State = ECombat_State::ECS_Throwing_Grenade;
 	if(Character)
 	{
 		Show_Attached_Grenade(true);
 		Character->Play_Throw_Grenade_Montage();
 		Attach_Actor_To_Left_Hand(Equipped_Weapon);
+	}
+
+	Grenades = FMath::Clamp(Grenades -1, 0, Maximum_Grenades);
+	Update_HUD_Grenades();
+}
+
+void UCombat_Component::Update_HUD_Grenades()
+{
+	Controller = Controller == nullptr ? Cast<AShooter_Player_Controller>(Character->Controller) : Controller;
+	if(Controller)
+	{
+		Controller->Set_HUD_Grenades(Grenades);
 	}
 }
 
