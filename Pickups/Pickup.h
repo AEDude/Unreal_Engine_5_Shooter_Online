@@ -68,6 +68,19 @@ private:
 
 	UPROPERTY(EditDefaultsOnly)
 	UStaticMeshComponent* Pickup_Mesh;
+
+	UPROPERTY(VisibleAnywhere)
+	class UNiagaraComponent* Pickup_Effect_Component;
+
+	UPROPERTY(EditDefaultsOnly)
+	class UNiagaraSystem* Pickup_Effect;
+
+	FTimerHandle Bind_Overlap_Timer;
+
+	float Bind_Overlap_Time = .25;
+
+	void Bind_Overlap_Timer_Finished();
+
 public:	
 	
 

@@ -53,7 +53,11 @@ public:
 	UFUNCTION(BlueprintImplementableEvent)
 	void Show_Sniper_Scope_Widget(bool bShow_Scope);
 
+	void Update_HUD_Health();
 
+	void Update_HUD_Armor();
+
+	void Update_HUD_Ammo();
 
 protected:
 	// Called when the game starts or when spawned
@@ -82,7 +86,7 @@ protected:
 	
 	UFUNCTION()
 	void Recieve_Damage(AActor* Damaged_Actor, float Damage, const UDamageType* Damage_Type, class AController* Instigator_Controller, AActor* Damage_Causer);
-	void Update_HUD_Health();
+
 	// Poll for any relevant classes and initialize our HUD
 	void Poll_Initialize();
 
@@ -157,14 +161,26 @@ private:
 	/**
 	 * Player Health
 	*/
-	UPROPERTY(EditAnywhere, Category = "Player Stats")
+	UPROPERTY(EditDefaultsOnly, Category = "Player Stats")
 	float Max_Health = 100.f;
 
-	UPROPERTY(ReplicatedUsing = OnRep_Health, VisibleAnywhere, Category = "Player Stats")
+	UPROPERTY(ReplicatedUsing = OnRep_Health, EditDefaultsOnly, Category = "Player Stats")
 	float Health = 100.f;
 
 	UFUNCTION()
-	void OnRep_Health();
+	void OnRep_Health(float Last_Health);
+
+	/**
+	 * Player Armor
+	*/
+	UPROPERTY(EditDefaultsOnly, Category = "Player Stats")
+	float Max_Armor = 100.f;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Armor, EditDefaultsOnly, Category = "Player Stats")
+	float Armor = 100.f;
+
+	UFUNCTION()
+	void OnRep_Armor(float Last_Armor);
 
 	UPROPERTY()
 	class AShooter_Player_Controller* Shooter_Player_Controller;
@@ -203,10 +219,15 @@ public:
 	FORCEINLINE bool Should_Rotate_Root_Bone() const { return bRotate_Root_Bone; }
 	FORCEINLINE bool Is_Eliminated() const { return bEliminated; }
 	FORCEINLINE float Get_Health() const { return Health; }
+	FORCEINLINE void Set_Health(float Amount) { Health = Amount;}
 	FORCEINLINE float Get_Max_Health() const { return Max_Health; }
+	FORCEINLINE float Get_Armor() const { return Armor;}
+	FORCEINLINE void Set_Armor(float Amount) {Armor = Amount; }
+	FORCEINLINE float Get_Max_Armor() const { return Max_Armor;}
 	ECombat_State Get_Combat_State() const;
 	FORCEINLINE UCombat_Component* Get_Combat() const { return Combat; }
 	FORCEINLINE bool Get_Disable_Gameplay() const { return bDisable_Gameplay; }
 	FORCEINLINE UAnimMontage* Get_Reload_Montage() const {return Reload_Montage;}
 	FORCEINLINE UStaticMeshComponent* Get_Attached_Grenade() const { return Attached_Grenade; }
+	FORCEINLINE UBuff_Component* Get_Buff() const { return Buff; }
 };

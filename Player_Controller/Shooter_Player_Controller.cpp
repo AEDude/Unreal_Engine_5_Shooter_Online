@@ -23,13 +23,6 @@ void AShooter_Player_Controller::BeginPlay()
     Server_Check_Match_State();
 }
 
-void AShooter_Player_Controller::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifetimeProps) const
-{
-    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-    DOREPLIFETIME(AShooter_Player_Controller, Match_State)
-}
-
 void AShooter_Player_Controller::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
@@ -41,6 +34,13 @@ void AShooter_Player_Controller::Tick(float DeltaTime)
     Poll_Initialized();
 }
 
+void AShooter_Player_Controller::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+    DOREPLIFETIME(AShooter_Player_Controller, Match_State)
+}
+
 void AShooter_Player_Controller::Check_Time_Sync(float DeltaTime)
 {
     Time_Sync_Running_Time += DeltaTime;
@@ -48,6 +48,31 @@ void AShooter_Player_Controller::Check_Time_Sync(float DeltaTime)
     {
         Server_Request_Server_Time(GetWorld()->GetTimeSeconds());
         Time_Sync_Running_Time = 0.f;
+    }
+}
+
+void AShooter_Player_Controller::Poll_Initialized()
+{
+    if(Character_Overlay == nullptr)
+    {
+        if(Shooter_HUD && Shooter_HUD->Character_Overlay)
+        {
+           Character_Overlay = Shooter_HUD->Character_Overlay;
+           if(Character_Overlay)
+           {
+                if(bInitialized_Health) Set_HUD_Health(HUD_Health, HUD_MAX_Health);
+                if(bInitialized_Armor) Set_HUD_Armor(HUD_Armor, HUD_Max_Armor);
+                if(bInitialized_Score) Set_HUD_Score(HUD_Score);
+                if(bInitialized_Deaths) Set_HUD_Deaths(HUD_Deaths);
+
+                AShooter_Character* Shooter_Character = Cast<AShooter_Character>(GetPawn());
+                if(Shooter_Character && Shooter_Character->Get_Combat())
+                {
+                    Set_HUD_Grenades(Shooter_Character->Get_Combat()->Get_Grenades());
+                }
+                Set_HUD_Grenades(HUD_Grenades);
+           }
+        }
     }
 }
 
@@ -88,10 +113,14 @@ void AShooter_Player_Controller::Client_Join_Mid_Game_Implementation(float Warmu
 void AShooter_Player_Controller::OnPossess(APawn *InPawn)
 {
     Super::OnPossess(InPawn);
+    
     AShooter_Character* Shooter_Character = Cast<AShooter_Character>(InPawn);
     if(Shooter_Character)
     {
         Set_HUD_Health(Shooter_Character->Get_Health(), Shooter_Character->Get_Max_Health());
+        Shooter_Character->Update_HUD_Health();
+        Shooter_Character->Update_HUD_Armor();
+        Shooter_Character->Update_HUD_Ammo();
     }
 }
 
@@ -130,10 +159,35 @@ void AShooter_Player_Controller::Set_HUD_Health(float Health, float Max_Health)
     }
     else
     {
-        bInitialized_Character_Overlay = true;
+        bInitialized_Health = true;
         HUD_Health = Health;
         HUD_MAX_Health = Max_Health;
     }
+}
+
+void AShooter_Player_Controller::Set_HUD_Armor(float Armor, float Max_Armor)
+{
+    Shooter_HUD = Shooter_HUD == nullptr ? Cast<AShooter_HUD>(GetHUD()) : Shooter_HUD;
+
+    bool bHud_Is_Valid = Shooter_HUD &&
+    Shooter_HUD->Character_Overlay &&
+    Shooter_HUD->Character_Overlay->Armor_bar &&
+    Shooter_HUD->Character_Overlay->Armor_Text;
+
+    if(bHud_Is_Valid)
+    {
+        const float Armor_Percent = Armor / Max_Armor;
+        Shooter_HUD->Character_Overlay->Armor_bar->SetPercent(Armor_Percent);
+        FString Armor_Text = FString::Printf(TEXT("%d/%d"), FMath::CeilToInt(Armor), FMath::CeilToInt(Max_Armor));
+        Shooter_HUD->Character_Overlay->Armor_Text->SetText(FText::FromString(Armor_Text));
+    }
+    else
+    {
+        bInitialized_Armor = true;
+        HUD_Armor = Armor;
+        HUD_Max_Armor = Max_Armor;
+    }
+
 }
 
 void AShooter_Player_Controller::Set_HUD_Score(float Score)
@@ -150,7 +204,7 @@ void AShooter_Player_Controller::Set_HUD_Score(float Score)
     }
     else
     {
-        bInitialized_Character_Overlay = true;
+        bInitialized_Score = true;
         HUD_Score = Score;
     }
 }
@@ -169,7 +223,7 @@ void AShooter_Player_Controller::Set_HUD_Deaths(int32 Deaths)
     }
     else
     {
-        bInitialized_Character_Overlay = true;
+        bInitialized_Deaths = true;
         HUD_Deaths = Deaths;
     }
 }
@@ -304,31 +358,8 @@ void AShooter_Player_Controller::Set_HUD_Grenades(int32 Grenades)
     }
     else
     {
-       HUD_Grenades = Grenades; 
-    }
-}
-
-void AShooter_Player_Controller::Poll_Initialized()
-{
-    if(Character_Overlay == nullptr)
-    {
-        if(Shooter_HUD && Shooter_HUD->Character_Overlay)
-        {
-           Character_Overlay = Shooter_HUD->Character_Overlay;
-           if(Character_Overlay)
-           {
-                Set_HUD_Health(HUD_Health, HUD_MAX_Health);
-                Set_HUD_Score(HUD_Score);
-                Set_HUD_Deaths(HUD_Deaths);
-
-                AShooter_Character* Shooter_Character = Cast<AShooter_Character>(GetPawn());
-                if(Shooter_Character && Shooter_Character->Get_Combat())
-                {
-                    Set_HUD_Grenades(Shooter_Character->Get_Combat()->Get_Grenades());
-                }
-                Set_HUD_Grenades(HUD_Grenades);
-           }
-        }
+        bInitialized_Grenades = true; 
+        HUD_Grenades = Grenades; 
     }
 }
 

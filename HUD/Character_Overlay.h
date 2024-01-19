@@ -15,11 +15,18 @@ class SHOOTER_ONLINE_API UCharacter_Overlay : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(meta = (BindWidget))
-	class UProgressBar* Health_Bar;
 
 	UPROPERTY(meta = (BindWidget))
-	class UTextBlock* Health_Text;
+	class UProgressBar* Armor_bar;
+
+	UPROPERTY(meta = (BindWidget))
+	class UTextBlock* Armor_Text;
+
+	UPROPERTY(meta = (BindWidget))
+	UProgressBar* Health_Bar;
+
+	UPROPERTY(meta = (BindWidget))
+	UTextBlock* Health_Text;
 
 	UPROPERTY(meta = (BindWidget))
 	UTextBlock* Score_Amount;

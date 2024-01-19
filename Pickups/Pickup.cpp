@@ -6,6 +6,8 @@
 #include "Sound/SoundCue.h"
 #include "Components/SphereComponent.h"
 #include "Shooter_Online/Weapon/Weapon_Types.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 
 // Sets default values
 APickup::APickup()
@@ -30,6 +32,10 @@ APickup::APickup()
 	Pickup_Mesh->SetRelativeScale3D(FVector(0.3f, 0.3f, 0.3f));
 	Pickup_Mesh->SetRenderCustomDepth(true);
 	Pickup_Mesh->SetCustomDepthStencilValue(CUSTOM_DEPTH_PURPLE);
+
+	Pickup_Effect_Component = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Pickup_Effect_Component"));
+    Pickup_Effect_Component->SetupAttachment(RootComponent);
+
 }
 
 // Called when the game starts or when spawned
@@ -41,9 +47,13 @@ void APickup::BeginPlay()
 
 	if(HasAuthority())
 	{
-		Overlap_Sphere->OnComponentBeginOverlap.AddDynamic(this, &APickup::On_Sphere_Overlap);
+		GetWorldTimerManager().SetTimer(
+			Bind_Overlap_Timer,
+			this,
+			&APickup::Bind_Overlap_Timer_Finished,
+			Bind_Overlap_Time
+		);
 	}
-	
 }
 
 // Called every frame
@@ -76,6 +86,16 @@ void APickup::Destroyed()
 			GetActorLocation()
 		);
 	}
+
+	if(Pickup_Effect)
+    {
+        UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+        this,
+        Pickup_Effect,
+        GetActorLocation(),
+        GetActorRotation()
+        );
+    }
 }
 
 void APickup::Raise_Lower_Pickup(float DeltaTime)
@@ -117,4 +137,9 @@ bool APickup::Should_Pickup_Return() const
 {
 	float Pickup_Distance_Moved = Distance_Moved();
     return Pickup_Distance_Moved > Maximum_Move_Distance;
+}
+
+void APickup::Bind_Overlap_Timer_Finished()
+{
+		Overlap_Sphere->OnComponentBeginOverlap.AddDynamic(this, &APickup::On_Sphere_Overlap);
 }

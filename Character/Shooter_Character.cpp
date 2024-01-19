@@ -71,12 +71,75 @@ AShooter_Character::AShooter_Character()
 
 }
 
+
+// Called when the game starts or when spawned
+void AShooter_Character::BeginPlay()
+{
+	Super::BeginPlay();
+
+	Update_HUD_Health();
+    Update_HUD_Armor();
+	Update_HUD_Ammo();
+
+	if(Combat)
+	{
+		Combat->Spawn_Default_Weapon();
+	}
+
+	if(HasAuthority())
+	{
+		OnTakeAnyDamage.AddDynamic(this, &AShooter_Character::Recieve_Damage);
+	}
+	
+	if(Attached_Grenade)
+	{
+		Attached_Grenade->SetVisibility(false);
+	}
+	
+}
+
+// Called every frame
+void AShooter_Character::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	Rotate_In_Place(DeltaTime);
+
+	Hide_Camera_When_Character_Is_Close();
+	Poll_Initialize();
+}
+
+// Called to bind functionality to input
+void AShooter_Character::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+
+	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &AShooter_Character::Jump);
+
+	PlayerInputComponent->BindAxis("Move_Forward", this, &ThisClass::Move_Forward);
+	PlayerInputComponent->BindAxis("Move_Right", this, &ThisClass::Move_Right);
+	PlayerInputComponent->BindAxis("Turn", this, &ThisClass::Turn);
+	PlayerInputComponent->BindAxis("Look_Up", this, &ThisClass::Look_Up);
+
+	PlayerInputComponent->BindAction("Equip", IE_Pressed, this, &AShooter_Character::Equip_Button_Pressed);
+	PlayerInputComponent->BindAction("Crouch", IE_Pressed, this, &AShooter_Character::Crouch_Button_Pressed);
+	PlayerInputComponent->BindAction("Aim", IE_Pressed, this, &AShooter_Character::Aim_Button_Pressed);
+	PlayerInputComponent->BindAction("Aim", IE_Released, this, &AShooter_Character::Aim_Button_Released);
+	PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &AShooter_Character::Fire_Button_Pressed);
+	PlayerInputComponent->BindAction("Fire", IE_Released, this, &AShooter_Character::Fire_Button_Released);
+	PlayerInputComponent->BindAction("Reload", IE_Pressed, this, &AShooter_Character::Reload_Button_Pressed);
+	PlayerInputComponent->BindAction("Throw_Grenade", IE_Released, this, &AShooter_Character::Grenade_Button_Pressed);
+	PlayerInputComponent->BindAction("Sprint", IE_Pressed, this, &AShooter_Character::Sprint_Button_Pressed);
+	PlayerInputComponent->BindAction("Sprint", IE_Released, this, &AShooter_Character::Sprint_Button_Released);
+}
+
 void AShooter_Character::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME_CONDITION(AShooter_Character, Overlapping_Weapon, COND_OwnerOnly);
 	DOREPLIFETIME(AShooter_Character, Health);
+	DOREPLIFETIME(AShooter_Character, Armor);
 	DOREPLIFETIME(AShooter_Character, bDisable_Gameplay);
 	
 }
@@ -159,61 +222,6 @@ void AShooter_Character::Destroyed()
 	}
 }
 
-
-// Called when the game starts or when spawned
-void AShooter_Character::BeginPlay()
-{
-	Super::BeginPlay();
-
-	Update_HUD_Health();
-
-	if(HasAuthority())
-	{
-		OnTakeAnyDamage.AddDynamic(this, &AShooter_Character::Recieve_Damage);
-	}
-	
-	if(Attached_Grenade)
-	{
-		Attached_Grenade->SetVisibility(false);
-	}
-	
-}
-
-// Called every frame
-void AShooter_Character::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-
-	Rotate_In_Place(DeltaTime);
-
-	Hide_Camera_When_Character_Is_Close();
-	Poll_Initialize();
-}
-
-// Called to bind functionality to input
-void AShooter_Character::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
-	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &AShooter_Character::Jump);
-
-	PlayerInputComponent->BindAxis("Move_Forward", this, &ThisClass::Move_Forward);
-	PlayerInputComponent->BindAxis("Move_Right", this, &ThisClass::Move_Right);
-	PlayerInputComponent->BindAxis("Turn", this, &ThisClass::Turn);
-	PlayerInputComponent->BindAxis("Look_Up", this, &ThisClass::Look_Up);
-
-	PlayerInputComponent->BindAction("Equip", IE_Pressed, this, &AShooter_Character::Equip_Button_Pressed);
-	PlayerInputComponent->BindAction("Crouch", IE_Pressed, this, &AShooter_Character::Crouch_Button_Pressed);
-	PlayerInputComponent->BindAction("Aim", IE_Pressed, this, &AShooter_Character::Aim_Button_Pressed);
-	PlayerInputComponent->BindAction("Aim", IE_Released, this, &AShooter_Character::Aim_Button_Released);
-	PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &AShooter_Character::Fire_Button_Pressed);
-	PlayerInputComponent->BindAction("Fire", IE_Released, this, &AShooter_Character::Fire_Button_Released);
-	PlayerInputComponent->BindAction("Reload", IE_Pressed, this, &AShooter_Character::Reload_Button_Pressed);
-	PlayerInputComponent->BindAction("Throw_Grenade", IE_Released, this, &AShooter_Character::Grenade_Button_Pressed);
-	PlayerInputComponent->BindAction("Sprint", IE_Pressed, this, &AShooter_Character::Sprint_Button_Pressed);
-	PlayerInputComponent->BindAction("Sprint", IE_Released, this, &AShooter_Character::Sprint_Button_Released);
-}
-
 void AShooter_Character::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
@@ -224,6 +232,7 @@ void AShooter_Character::PostInitializeComponents()
 	if(Buff)
 	{
 		Buff->Character = this;
+		Buff->Set_Initial_Speeds(GetCharacterMovement()->MaxWalkSpeed, GetCharacterMovement()->MaxWalkSpeedCrouched);
 	}
 }
 
@@ -332,9 +341,26 @@ void AShooter_Character::Ragdoll_On_Death()
 void AShooter_Character::Recieve_Damage(AActor *Damaged_Actor, float Damage, const UDamageType *Damage_Type, AController *Instigator_Controller, AActor *Damage_Causer)
 {
 	if(bEliminated) return;
+
+	float Damage_To_Health = Damage;
+	if(Armor > 0.f)
+	{
+		if(Armor >= Damage)
+		{
+			Armor = FMath::Clamp(Armor - Damage, 0.f, Max_Armor);
+			Damage_To_Health = 0.f;
+		}
+		else
+		{
+			Damage_To_Health = FMath::Clamp(Damage_To_Health - Armor, 0.f, Damage);
+			Armor = 0.f;
+		}
+	}
 	
-	Health = FMath::Clamp(Health - Damage, 0.f, Max_Health);
+	Health = FMath::Clamp(Health - Damage_To_Health, 0.f, Max_Health);
+	
 	Update_HUD_Health();
+	Update_HUD_Armor();
 	Play_Hit_React_Montage();
 	if(Health == 0.f)
 	{
@@ -664,10 +690,23 @@ void AShooter_Character::Hide_Camera_When_Character_Is_Close()
 	}*/
 }
 
-void AShooter_Character::OnRep_Health()
+void AShooter_Character::OnRep_Health(float Last_Health)
 {
 	Update_HUD_Health();
-	Play_Hit_React_Montage();
+	if(Health < Last_Health)
+	{
+		Play_Hit_React_Montage();
+	}
+	
+}
+
+void AShooter_Character::OnRep_Armor(float Last_Armor)
+{
+	Update_HUD_Armor();
+	if(Armor < Last_Armor)
+	{
+		//Play_Hit_React_Montage();
+	}
 }
 
 void AShooter_Character::Update_HUD_Health()
@@ -676,6 +715,25 @@ void AShooter_Character::Update_HUD_Health()
 	if(Shooter_Player_Controller)
 	{
 		Shooter_Player_Controller->Set_HUD_Health(Health, Max_Health);
+	}
+}
+
+void AShooter_Character::Update_HUD_Armor()
+{
+	Shooter_Player_Controller = Shooter_Player_Controller == nullptr ? Cast<AShooter_Player_Controller>(Controller) : Shooter_Player_Controller;
+	if(Shooter_Player_Controller)
+	{
+		Shooter_Player_Controller->Set_HUD_Armor(Armor, Max_Armor);
+	}
+}
+
+void AShooter_Character::Update_HUD_Ammo()
+{
+	Shooter_Player_Controller = Shooter_Player_Controller == nullptr ? Cast<AShooter_Player_Controller>(Controller) : Shooter_Player_Controller;
+	if(Shooter_Player_Controller && Combat && Combat->Equipped_Weapon)
+	{
+		Shooter_Player_Controller->Set_HUD_Carried_Ammo(Combat->Carried_Ammo);
+		Shooter_Player_Controller->Set_HUD_Weapon_Ammo(Combat->Equipped_Weapon->Get_Ammo());
 	}
 }
 

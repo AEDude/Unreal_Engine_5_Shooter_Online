@@ -25,6 +25,8 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifetimeProps) const override;
 
+	void Spawn_Default_Weapon();
+
 	void Equip_Weapon(class AWeapon* Weapon_To_Equip);
 	void Fire_Button_Pressed(bool bPressed);
 	
@@ -166,6 +168,13 @@ private:
 	float Crosshair_Firing_Weapon_Factor;
 
 	FVector Hit_Target;
+
+	/**
+	 * Default Weapon
+	*/
+
+	UPROPERTY(EditDefaultsOnly)
+	TSubclassOf<AWeapon> Default_Weapon_Class;
 	
 
 	/**

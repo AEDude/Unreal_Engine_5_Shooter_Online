@@ -18,6 +18,7 @@
 #include "Sound/SoundCue.h"
 #include "Shooter_Online/Character/Shooter_Anim_Instance.h"
 #include "Shooter_Online/Weapon/Projectile.h"
+#include "Shooter_Online/Game_Mode/Shooter_Online_Game_Mode.h"
 
 // Sets default values for this component's properties
 UCombat_Component::UCombat_Component()
@@ -50,9 +51,10 @@ void UCombat_Component::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &Ou
 void UCombat_Component::BeginPlay()
 {
 	Super::BeginPlay();
-
+	
 	if(Character)
 	{
+		Character->Update_HUD_Ammo();
 		Character->GetCharacterMovement()->MaxWalkSpeed = Base_Walk_Speed;
 
 		if(Character->Get_Follow_Camera())
@@ -83,6 +85,17 @@ void UCombat_Component::TickComponent(float DeltaTime, ELevelTick TickType, FAct
 		Interp_FOV(DeltaTime);
 	}
 	// ...
+}
+
+void UCombat_Component::Spawn_Default_Weapon()
+{
+	AShooter_Online_Game_Mode* Shooter_Game_Mode = Cast<AShooter_Online_Game_Mode>(UGameplayStatics::GetGameMode(this));
+	UWorld* World = GetWorld();
+	if(Shooter_Game_Mode && World && Character && !Character->Is_Eliminated() && Default_Weapon_Class)
+	{
+		AWeapon* Starting_Weapon = World->SpawnActor<AWeapon>(Default_Weapon_Class);
+		Equip_Weapon(Starting_Weapon);
+	}
 }
 
 void UCombat_Component::Set_HUD_Crosshairs(float DeltaTime)
@@ -611,8 +624,10 @@ void UCombat_Component::Update_Shotgun_Ammo_Values()
 	{
 		Controller->Set_HUD_Carried_Ammo(Carried_Ammo);
 	}
+	
 	Equipped_Weapon->Add_Ammo(-1);
 	bCan_Fire = true;
+	//UE_LOG(LogTemp, Display, TEXT("bCan Fire is: %i"), bCan_Fire);
 	if(Equipped_Weapon->Is_Full() || Carried_Ammo == 0)
 	{
 		Jump_To_Shotgun_End();
@@ -799,11 +814,15 @@ void UCombat_Component::OnRep_Equipped_Weapon()
 
 bool UCombat_Component::Can_Fire()
 {
-    if(Equipped_Weapon == nullptr) return false;
+	if(Equipped_Weapon == nullptr) return false;
 	
 	if(!Equipped_Weapon->Is_Empty() && bCan_Fire && Combat_State == ECombat_State::ECS_Reloading && 
-	   Equipped_Weapon->Get_Weapon_Type() == EWeapon_Type::EWT_Shotgun) return true;
-	
+	   Equipped_Weapon->Get_Weapon_Type() == EWeapon_Type::EWT_Shotgun) 
+	{
+		return true;
+	}
+	UE_LOG(LogTemp, Display, TEXT("Can fire Shotgun Fire is: %i"), bCan_Fire);
+
 	return !Equipped_Weapon->Is_Empty() && bCan_Fire && Combat_State == ECombat_State::ECS_Unoccupied;
 }
 
