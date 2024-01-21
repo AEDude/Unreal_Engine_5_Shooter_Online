@@ -40,6 +40,7 @@ void UCombat_Component::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &Ou
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
 	DOREPLIFETIME(UCombat_Component, Equipped_Weapon);
+	DOREPLIFETIME(UCombat_Component, Secondary_Weapon)
 	DOREPLIFETIME(UCombat_Component, bAiming);
 	DOREPLIFETIME(UCombat_Component, bSprinting);
 	DOREPLIFETIME_CONDITION(UCombat_Component, Carried_Ammo, COND_OwnerOnly);
@@ -54,7 +55,6 @@ void UCombat_Component::BeginPlay()
 	
 	if(Character)
 	{
-		Character->Update_HUD_Ammo();
 		Character->GetCharacterMovement()->MaxWalkSpeed = Base_Walk_Speed;
 
 		if(Character->Get_Follow_Camera())
@@ -94,6 +94,7 @@ void UCombat_Component::Spawn_Default_Weapon()
 	if(Shooter_Game_Mode && World && Character && !Character->Is_Eliminated() && Default_Weapon_Class)
 	{
 		AWeapon* Starting_Weapon = World->SpawnActor<AWeapon>(Default_Weapon_Class);
+		Starting_Weapon->bDestroy_Weapon = true;
 		Equip_Weapon(Starting_Weapon);
 	}
 }
@@ -462,24 +463,65 @@ void UCombat_Component::Equip_Weapon(AWeapon* Weapon_To_Equip)
 	if(Character == nullptr || Weapon_To_Equip == nullptr || bSprinting) return;
 	if(Combat_State != ECombat_State::ECS_Unoccupied) return;
 
-	Drop_Equipped_Weapon();
+	if(Equipped_Weapon != nullptr && Secondary_Weapon == nullptr)
+	{
+		Equip_Secondary_Weapon(Weapon_To_Equip);
+	}
+	else
+	{
+		Equip_Primary_Weapon(Weapon_To_Equip);
+	}
 	
-	Equipped_Weapon = Weapon_To_Equip;
-	Equipped_Weapon->Set_Weapon_State(EWeaponState::EWS_Equipped);
-
-	Attach_Actor_To_Right_Hand(Equipped_Weapon);
-	
-	Equipped_Weapon->SetOwner(Character);
-	Equipped_Weapon->Set_HUD_Ammo();
-	
-	Update_Carried_Ammo();
-
-	Play_Equip_Weapon_Sound();
-
-	Reload_Empty_Magazine();
-
 	Character->GetCharacterMovement()->bOrientRotationToMovement = false;
 	Character->bUseControllerRotationYaw = true;
+}
+
+bool UCombat_Component::Should_Swap_Weapons()
+{
+	return (Equipped_Weapon != nullptr && Secondary_Weapon != nullptr);
+}
+
+void UCombat_Component::Swap_Weapons()
+{
+	AWeapon* Temporary_Weapon_Holder = Equipped_Weapon;
+	Equipped_Weapon = Secondary_Weapon;
+	Secondary_Weapon = Temporary_Weapon_Holder;
+
+	Equipped_Weapon->Set_Weapon_State(EWeaponState::EWS_Equipped);
+	Attach_Actor_To_Right_Hand(Equipped_Weapon);
+	Equipped_Weapon->SetOwner(Character);
+	Equipped_Weapon->Set_HUD_Ammo();
+	Update_Carried_Ammo();
+	Play_Equip_Weapon_Sound(Equipped_Weapon);
+	Reload_Empty_Magazine();
+
+	Secondary_Weapon->Set_Weapon_State(EWeaponState::EWS_Equipped_Secondary);
+	Attach_Actor_To_Back(Secondary_Weapon);
+}
+
+void UCombat_Component::Equip_Primary_Weapon(AWeapon* Weapon_To_Equip)
+{
+	if(Weapon_To_Equip == nullptr) return;
+
+	Drop_Equipped_Weapon();
+	Equipped_Weapon = Weapon_To_Equip;
+	Equipped_Weapon->Set_Weapon_State(EWeaponState::EWS_Equipped);
+	Attach_Actor_To_Right_Hand(Equipped_Weapon);
+	Equipped_Weapon->SetOwner(Character);
+	Equipped_Weapon->Set_HUD_Ammo();
+	Update_Carried_Ammo();
+	Play_Equip_Weapon_Sound(Weapon_To_Equip);
+	Reload_Empty_Magazine();
+}
+
+void UCombat_Component::Equip_Secondary_Weapon(AWeapon* Weapon_To_Equip)
+{
+	if(Weapon_To_Equip == nullptr) return;
+	Secondary_Weapon = Weapon_To_Equip;
+	Secondary_Weapon->Set_Weapon_State(EWeaponState::EWS_Equipped_Secondary);
+	Attach_Actor_To_Back(Weapon_To_Equip);
+	Play_Equip_Weapon_Sound(Weapon_To_Equip);
+	Secondary_Weapon->SetOwner(Character);
 }
 
 void UCombat_Component::Drop_Equipped_Weapon()
@@ -516,6 +558,16 @@ void UCombat_Component::Attach_Actor_To_Left_Hand(AActor* Actor_To_Attach)
 	}
 }
 
+void UCombat_Component::Attach_Actor_To_Back(AActor* Actor_To_Attach)
+{
+	if(Character == nullptr || Character->GetMesh() == nullptr || Actor_To_Attach == nullptr) return;
+	const USkeletalMeshSocket* Secondary_Weapon_Socket = Character->GetMesh()->GetSocketByName(FName("Secondary_Weapon_Socket"));
+	if(Secondary_Weapon_Socket)
+	{
+		Secondary_Weapon_Socket->AttachActor(Actor_To_Attach, Character->GetMesh());
+	}
+}
+
 void UCombat_Component::Update_Carried_Ammo()
 {
 	if(Equipped_Weapon == nullptr) return;
@@ -532,13 +584,13 @@ void UCombat_Component::Update_Carried_Ammo()
 	}
 }
 
-void UCombat_Component::Play_Equip_Weapon_Sound()
+void UCombat_Component::Play_Equip_Weapon_Sound(AWeapon* Weapon_To_Equip)
 {
-	if(Character && Equipped_Weapon && Equipped_Weapon->Equip_Sound)
+	if(Character && Weapon_To_Equip && Weapon_To_Equip->Equip_Sound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(
 			this,
-			Equipped_Weapon->Equip_Sound,
+			Weapon_To_Equip->Equip_Sound,
 			Character->GetActorLocation()
 		);
 	}
@@ -808,7 +860,18 @@ void UCombat_Component::OnRep_Equipped_Weapon()
 		Attach_Actor_To_Right_Hand(Equipped_Weapon);
 		Character->GetCharacterMovement()->bOrientRotationToMovement = false;
 		Character->bUseControllerRotationYaw = true;
-		Play_Equip_Weapon_Sound();
+		Play_Equip_Weapon_Sound(Equipped_Weapon);
+		Equipped_Weapon->Set_HUD_Ammo();
+	}
+}
+
+void UCombat_Component::On_Rep_Secondary_Weapon()
+{
+	if(Secondary_Weapon && Character)
+	{
+		Secondary_Weapon->Set_Weapon_State(EWeaponState::EWS_Equipped_Secondary);
+		Attach_Actor_To_Back(Secondary_Weapon);
+		Play_Equip_Weapon_Sound(Equipped_Weapon);
 	}
 }
 

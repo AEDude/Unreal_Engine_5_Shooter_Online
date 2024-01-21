@@ -153,11 +153,7 @@ void AShooter_Character::OnRep_ReplicatedMovement()
 
 void AShooter_Character::Eliminated()
 {
-	if(Combat && Combat->Equipped_Weapon)
-	{
-		Combat->Equipped_Weapon->Drop_Weapons();
-	}
-	
+	Drop_Or_Destroy_Weapons();
 	Multicast_Eliminated();
 	GetWorldTimerManager().SetTimer(
 		Eliminated_Timer,
@@ -207,6 +203,34 @@ void AShooter_Character::Eliminated_Timer_Finished()
 	if(Shooter_Online_Game_Mode)
 	{
 		Shooter_Online_Game_Mode->Request_Respawn(this, Controller);
+	}
+}
+
+void AShooter_Character::Drop_Or_Destroy_Weapons()
+{
+	if(Combat)
+	{
+		if(Combat->Equipped_Weapon)
+		{
+			Drop_Or_Destroy_Weapon(Combat->Equipped_Weapon);
+		}
+		if(Combat->Secondary_Weapon)
+		{
+			Drop_Or_Destroy_Weapon(Combat->Secondary_Weapon);
+		}
+	}
+}
+
+void AShooter_Character::Drop_Or_Destroy_Weapon(AWeapon* Weapon)
+{
+	if(Weapon == nullptr) return;
+	if(Weapon->bDestroy_Weapon)
+	{
+		Weapon->Destroy();
+	}
+	else
+	{
+		Weapon->Drop_Weapons();
 	}
 }
 
@@ -412,17 +436,9 @@ void AShooter_Character::Look_Up(float Value)
 void AShooter_Character::Equip_Button_Pressed()
 {
 	if(bDisable_Gameplay) return;
-
 	if(Combat)
 	{
-		if(HasAuthority())
-		{
-			Combat->Equip_Weapon(Overlapping_Weapon);
-		}
-		else
-		{
-			Server_Equip_Button_Pressed();
-		}
+		Server_Equip_Button_Pressed();
 	}
 }
 
@@ -430,7 +446,14 @@ void AShooter_Character::Server_Equip_Button_Pressed_Implementation()
 {
 	if(Combat)
 	{
-		Combat->Equip_Weapon(Overlapping_Weapon);
+		if(Overlapping_Weapon)
+		{
+			Combat->Equip_Weapon(Overlapping_Weapon);
+		}
+		else if (Combat->Should_Swap_Weapons())
+		{
+			Combat->Swap_Weapons();
+		}
 	}
 }
 

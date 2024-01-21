@@ -12,6 +12,7 @@ enum class EWeaponState : uint8
 {
 	EWS_Initial UMETA(DisplayName = "Initial_State"),
 	EWS_Equipped UMETA(DisplayName = "Equipped"),
+	EWS_Equipped_Secondary UMETA(DisplayName = "Equipped_Secondary"),
 	EWS_Dropped UMETA(DisplayName = "Dropped"),
 
 	EWS_MAX UMETA(DisplayName = "Default_Max")
@@ -82,9 +83,19 @@ public:
 	*/
 	void Eneble_Custom_Depth(bool bEneble);
 
+	bool bDestroy_Weapon = false;
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+
+	virtual void On_Weapon_State_Set();
+
+	virtual void On_Equipped();
+
+	virtual void On_Equipped_Secondary();
+
+	virtual void On_Dropped();
 
 	UFUNCTION()
 	virtual void On_Sphere_Overlap(

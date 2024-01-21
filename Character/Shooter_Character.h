@@ -83,6 +83,8 @@ protected:
 	void Fire_Button_Released();
 	void Play_Hit_React_Montage();
 	void Grenade_Button_Pressed();
+	void Drop_Or_Destroy_Weapon(AWeapon* Weapon);
+	void Drop_Or_Destroy_Weapons();
 	
 	UFUNCTION()
 	void Recieve_Damage(AActor* Damaged_Actor, float Damage, const UDamageType* Damage_Type, class AController* Instigator_Controller, AActor* Damage_Causer);

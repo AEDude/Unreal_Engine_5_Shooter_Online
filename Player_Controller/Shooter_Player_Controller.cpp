@@ -64,6 +64,8 @@ void AShooter_Player_Controller::Poll_Initialized()
                 if(bInitialized_Armor) Set_HUD_Armor(HUD_Armor, HUD_Max_Armor);
                 if(bInitialized_Score) Set_HUD_Score(HUD_Score);
                 if(bInitialized_Deaths) Set_HUD_Deaths(HUD_Deaths);
+                if(bInitialize_Carried_Ammo) Set_HUD_Carried_Ammo(HUD_Carried_Ammo);
+                if(bInitialize_Weapon_Ammo) Set_HUD_Weapon_Ammo(HUD_Weapon_Ammo);
 
                 AShooter_Character* Shooter_Character = Cast<AShooter_Character>(GetPawn());
                 if(Shooter_Character && Shooter_Character->Get_Combat())
@@ -240,6 +242,11 @@ void AShooter_Player_Controller::Set_HUD_Weapon_Ammo(int32 Ammo)
         FString Ammo_Text = FString::Printf(TEXT("%d"), Ammo);
         Shooter_HUD->Character_Overlay->Weapon_Ammo_Amount->SetText(FText::FromString(Ammo_Text));
     }
+    else
+    {
+        bInitialize_Weapon_Ammo = true;
+        HUD_Weapon_Ammo = Ammo;
+    }
 }
 
 void AShooter_Player_Controller::Set_HUD_Carried_Ammo(int32 Ammo)
@@ -253,6 +260,11 @@ void AShooter_Player_Controller::Set_HUD_Carried_Ammo(int32 Ammo)
     {
         FString Ammo_Text = FString::Printf(TEXT("%d"), Ammo);
         Shooter_HUD->Character_Overlay->Carried_Ammo_Amount->SetText(FText::FromString(Ammo_Text));
+    }
+    else
+    {
+        bInitialize_Carried_Ammo = true;
+        HUD_Carried_Ammo = Ammo;
     }
 }
 

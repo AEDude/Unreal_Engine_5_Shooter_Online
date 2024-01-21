@@ -105,8 +105,11 @@ private:
 	bool bInitialized_Score = false;
 	bool bInitialized_Deaths = false;
 	bool bInitialized_Grenades = false;
-	
+	bool bInitialize_Carried_Ammo = false;
+	bool bInitialize_Weapon_Ammo = false;
 
+	float HUD_Carried_Ammo;
+	float HUD_Weapon_Ammo;
 	float HUD_Armor = 0.f;
 	float HUD_Max_Armor = 0.f;
 	float HUD_Health = 0.f;

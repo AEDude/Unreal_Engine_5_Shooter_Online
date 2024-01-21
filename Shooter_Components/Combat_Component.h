@@ -28,6 +28,7 @@ public:
 	void Spawn_Default_Weapon();
 
 	void Equip_Weapon(class AWeapon* Weapon_To_Equip);
+	void Swap_Weapons();
 	void Fire_Button_Pressed(bool bPressed);
 	
 	void Reload();
@@ -83,6 +84,9 @@ protected:
 	UFUNCTION()
 	void OnRep_Equipped_Weapon();
 
+	UFUNCTION()
+	void On_Rep_Secondary_Weapon();
+
 	void Sprint_Button_Pressed(bool bPressed);
 
 	void Fire();
@@ -118,13 +122,19 @@ protected:
 
 	void Attach_Actor_To_Left_Hand(AActor* Actor_To_Attach);
 
+	void Attach_Actor_To_Back(AActor* Actor_To_Attach);
+
 	void Update_Carried_Ammo();
 
-	void Play_Equip_Weapon_Sound();
+	void Play_Equip_Weapon_Sound(AWeapon* Weapon_To_Equip);
 
 	void Reload_Empty_Magazine();
 
 	void Show_Attached_Grenade(bool bShow_Grenade);
+
+	void Equip_Primary_Weapon(AWeapon* Weapon_To_Equip);
+
+	void Equip_Secondary_Weapon(AWeapon* Weapon_To_Equip);
 
 private:
 	UPROPERTY()
@@ -136,6 +146,9 @@ private:
 	
 	UPROPERTY(ReplicatedUsing = OnRep_Equipped_Weapon)
 	AWeapon* Equipped_Weapon;
+
+	UPROPERTY(ReplicatedUsing = On_Rep_Secondary_Weapon)
+	AWeapon* Secondary_Weapon;
 
 	UPROPERTY(Replicated)
 	bool bAiming;
@@ -267,4 +280,5 @@ public:
 
 	FORCEINLINE ECombat_State Get_Combat_State() const { return Combat_State; }
 	FORCEINLINE int32 Get_Grenades() const { return Grenades; }
+	bool Should_Swap_Weapons();
 };

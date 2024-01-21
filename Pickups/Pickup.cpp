@@ -113,11 +113,8 @@ void APickup::Raise_Lower_Pickup(float DeltaTime)
 
 void APickup::Raise_Pickup(float DeltaTime)
 {
-	FVector Current_Location = GetActorLocation();
-
-	FVector Raise_Pickup = Current_Location + (Raise_Lower_Velocity * DeltaTime);
-	Current_Location = Raise_Pickup;
-	SetActorLocation(Current_Location);
+	const FVector Location_To_Raise_Pickup = GetActorLocation() + (Raise_Lower_Velocity * DeltaTime);
+	SetActorLocation(Location_To_Raise_Pickup);
 }
 
 void APickup::Lower_Pickup(float DeltatTime)
