@@ -2,6 +2,11 @@
 
 
 #include "Shooter_Character.h"
+#include "EnhancedInputComponent.h"
+#include "InputMappingContext.h"
+#include "EnhancedInputSubsystems.h"
+#include "InputActionValue.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -30,23 +35,37 @@ AShooter_Character::AShooter_Character()
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
+	//Initialize the Camera_Boom && include Header.
 	Camera_Boom = CreateDefaultSubobject<USpringArmComponent>(TEXT("Camera_Boom"));
+	//Attach Camera_Boom to character mesh because crouching changes capsule (RootComponent) size. Usually it would be attached to the RootComponent.
 	Camera_Boom->SetupAttachment(GetMesh());
+	//Set the Camera_Boom length.
 	Camera_Boom->TargetArmLength = 555.f;
+	//When disabled, the component will revert to using the stored RelativeRotation of the component.
 	Camera_Boom->bUsePawnControlRotation = true;
 
-
+	//Initialize Followe_Camera && include Header.
 	Follow_Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Follow_Camera"));
+	//Attach Follow_Camera to Camera_Boom.
 	Follow_Camera->SetupAttachment(Camera_Boom, USpringArmComponent::SocketName);
+	//Does not need to use the pawn control rotation because it's attached to the Camera_Boom.
 	Follow_Camera->bUsePawnControlRotation = false;
 
+	/*Don't forget to set this set the following two variables in the character Blueprint as well.*/
+	// Inherited variable set to false so an Unequipped character doesn't rotate with the controller rotation.
 	bUseControllerRotationYaw = false;
+	//Set to true by accessing the Character Movement Component. This is so the character orients its direction to match with whichever WASD key is pressed.
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 
+	//Initialize the Overhead_Widget which will display the players ID.
 	Overhead_Widget = CreateDefaultSubobject<UWidgetComponent>(TEXT("Overhead_Widget"));
+	//Attach the widget to the "RootComponent" of the character class.
 	Overhead_Widget->SetupAttachment(RootComponent);
 
+	//Initialize the "Combat_Component" && include Header.
 	Combat = CreateDefaultSubobject<UCombat_Component>(TEXT("Combat_Component"));
+	//Enable replication of the combat component so the variables on it which are replicated behave as expected. 
+	/*Components don't need to be registered in "GetLifetimeReplicatedProps" they only need "SetIsReplicated" set to true.*/
 	Combat->SetIsReplicated(true);
 
 	Buff = CreateDefaultSubobject<UBuff_Component>(TEXT("Buff_Component"));
@@ -58,17 +77,32 @@ AShooter_Character::AShooter_Character()
 	Attached_Grenade->SetupAttachment(GetMesh(), FName("Grenade_Socket"));
 	Attached_Grenade->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
+	//Set the Capsule Component's collision to ignore the the camera so that the capsule doesn't block/ interact with said camera. 
+	//If not done, the camera may snap in close when a capsule component intersects with the camera's (forward vector?). 
+	//Include "#include "Components/CapsuleComponent.h""
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
+	
+	//Set the collision object tyoe for the mesh to "ECC_Skeletal_Mesh"
 	GetMesh()->SetCollisionObjectType(ECC_Skeletal_Mesh);
+	//Set the Mesh's's collision to ignore the the camera so that the camera doesn't snap in close/ interact with the character. 
+	//If not done, the camera may snap in close when a the character intersects with the camera's (forward vector?).
+	//Example: When backed up against a wall and the camera is behind the character. 
 	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
 	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Visibility, ECollisionResponse::ECR_Block);
+	
+	//"NavAgentProps.bCanCrouch" is set by Unreal Engine. It determines wheather the character can crouch or not. To bypass 
+	//enebling "Can_Crouch" in "AShooter_Character" Character's Bluprint "NavAgentProps.bCanCrouch" is set to true here in the contstructor.
+	GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
+	
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 0.f, 850.f);
 
+	//Default value for enum class "ETurning_In_Place". The character should start off not turning.
 	Turning_In_Place = ETurning_In_Place::ETIP_Not_Turning;
+	
+	//How often the engine should replicate during max load of replication.
 	NetUpdateFrequency = 70.f;
+	//How often the engine should replicate when under low replication load.
 	MinNetUpdateFrequency = 33.f;
-
 }
 
 
@@ -90,12 +124,11 @@ void AShooter_Character::BeginPlay()
 	{
 		OnTakeAnyDamage.AddDynamic(this, &AShooter_Character::Recieve_Damage);
 	}
-	
+
 	if(Attached_Grenade)
 	{
 		Attached_Grenade->SetVisibility(false);
 	}
-	
 }
 
 // Called every frame
@@ -103,6 +136,12 @@ void AShooter_Character::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	/*Calling "Add_Input_Mapping_Context" in Tick to initialize the Server Controller. This is because the cast happens to early before the server gets initialized and in result 
+	the cast returns a player controller there is a delay between the time the game launches */
+
+	//"Add_Input_Mapping_Context" doesn't work when being called in Begin Play. This the case even when being called 7000x via a for loop.
+	Add_Input_Mapping_Context(Shooter_Online_Mapping_Context, 0);
+	
 	Rotate_In_Place(DeltaTime);
 
 	Hide_Camera_When_Character_Is_Close();
@@ -114,30 +153,83 @@ void AShooter_Character::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &AShooter_Character::Jump);
-
-	PlayerInputComponent->BindAxis("Move_Forward", this, &ThisClass::Move_Forward);
-	PlayerInputComponent->BindAxis("Move_Right", this, &ThisClass::Move_Right);
-	PlayerInputComponent->BindAxis("Turn", this, &ThisClass::Turn);
-	PlayerInputComponent->BindAxis("Look_Up", this, &ThisClass::Look_Up);
-
-	PlayerInputComponent->BindAction("Equip", IE_Pressed, this, &AShooter_Character::Equip_Button_Pressed);
-	PlayerInputComponent->BindAction("Crouch", IE_Pressed, this, &AShooter_Character::Crouch_Button_Pressed);
-	PlayerInputComponent->BindAction("Aim", IE_Pressed, this, &AShooter_Character::Aim_Button_Pressed);
-	PlayerInputComponent->BindAction("Aim", IE_Released, this, &AShooter_Character::Aim_Button_Released);
-	PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &AShooter_Character::Fire_Button_Pressed);
-	PlayerInputComponent->BindAction("Fire", IE_Released, this, &AShooter_Character::Fire_Button_Released);
-	PlayerInputComponent->BindAction("Reload", IE_Pressed, this, &AShooter_Character::Reload_Button_Pressed);
-	PlayerInputComponent->BindAction("Throw_Grenade", IE_Released, this, &AShooter_Character::Grenade_Button_Pressed);
-	PlayerInputComponent->BindAction("Sprint", IE_Pressed, this, &AShooter_Character::Sprint_Button_Pressed);
-	PlayerInputComponent->BindAction("Sprint", IE_Released, this, &AShooter_Character::Sprint_Button_Released);
+	//Enhanced Input Action Binding
+	if(UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
+	{
+		EnhancedInputComponent->BindAction(Jump_Action, ETriggerEvent::Triggered, this, &AShooter_Character::Jump);
+		EnhancedInputComponent->BindAction(Move_Action, ETriggerEvent::Triggered, this, &AShooter_Character::Move);
+		EnhancedInputComponent->BindAction(Look_Action, ETriggerEvent::Triggered, this, &AShooter_Character::Look);
+		EnhancedInputComponent->BindAction(Equip_Action, ETriggerEvent::Triggered, this, &AShooter_Character::Equip_Button_Pressed);
+		EnhancedInputComponent->BindAction(Crouch_Action, ETriggerEvent::Triggered, this, &AShooter_Character::Crouch_Button_Pressed);
+		EnhancedInputComponent->BindAction(Aim_Action, ETriggerEvent::Started, this, &AShooter_Character::Aim_Button_Pressed);
+		EnhancedInputComponent->BindAction(Aim_Action, ETriggerEvent::Completed, this, &AShooter_Character::Aim_Button_Released);
+		EnhancedInputComponent->BindAction(Fire_Action, ETriggerEvent::Started, this, &AShooter_Character::Fire_Button_Pressed);
+		EnhancedInputComponent->BindAction(Fire_Action, ETriggerEvent::Completed, this, &AShooter_Character::Fire_Button_Released);
+		EnhancedInputComponent->BindAction(Reload_Action, ETriggerEvent::Triggered, this, &AShooter_Character::Reload_Button_Pressed);
+		EnhancedInputComponent->BindAction(Grenade_Action, ETriggerEvent::Triggered, this, &AShooter_Character::Grenade_Button_Pressed);
+		EnhancedInputComponent->BindAction(Sprint_Action, ETriggerEvent::Started, this, &AShooter_Character::Sprint_Button_Pressed);
+		EnhancedInputComponent->BindAction(Sprint_Action, ETriggerEvent::Completed, this, &AShooter_Character::Sprint_Button_Released);
+	}
+	
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("'%s' Failed to find an Enhanced Input component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
+	}
 }
 
-void AShooter_Character::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifetimeProps) const
+void AShooter_Character::Add_Input_Mapping_Context(UInputMappingContext* Context_To_Add, int32 In_Priority)
 {
+	if(!Context_To_Add) return;
+	
+	//Get the player controller
+	Shooter_Player_Controller = Cast<AShooter_Player_Controller>(GetController());
+	if(Shooter_Player_Controller)
+	{
+			//Add Input Mapping Context
+		if(Shooter_Player_Controller)
+		{
+			if(UEnhancedInputLocalPlayerSubsystem* Subsystem{ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(Shooter_Player_Controller->GetLocalPlayer())})
+			{
+				Subsystem->ClearAllMappings();
+				Subsystem->AddMappingContext(Context_To_Add, In_Priority);
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Input Mapping Initialization Failed"));
+		}
+	}
+}	
+
+void AShooter_Character::PostInitializeComponents()
+{
+	//"Super" calls the original version of the function before it is overriden.
+	Super::PostInitializeComponents();
+
+	//Just to be safe, before accessing the components listed below, it's good practice to always check if a pointer is valid (not null) 
+	if(Combat)
+	{
+		//Initializing the AShooter_Character pointer variable within UCombat_Component to point to this class as early as possible.
+		Combat->Character = this;
+	}
+	if(Buff)
+	{
+		//Initializing the AShooter_Character pointer variable within UBuff_Component to point to this class as early as possible.
+		Buff->Character = this;
+		Buff->Set_Initial_Speeds(GetCharacterMovement()->MaxWalkSpeed, GetCharacterMovement()->MaxWalkSpeedCrouched);
+	}
+}
+
+void AShooter_Character::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	//"Super" calls the original version of the function before it is overriden.
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
+	/*REGISTER THE VARIABLES WHICH ARE TO BE REPLCIATED*/ //Must include  #include "Net/UnrealNetwork.h"
+
+				        //(Class which contains the replicated variable, Variable to Replicate, Condition of replication (COND_OwnerOnly only replicates to the owner of the pawn (this PC))).
 	DOREPLIFETIME_CONDITION(AShooter_Character, Overlapping_Weapon, COND_OwnerOnly);
+			     //(Class which contains the replicated variable, Variable to Replicate).
 	DOREPLIFETIME(AShooter_Character, Health);
 	DOREPLIFETIME(AShooter_Character, Armor);
 	DOREPLIFETIME(AShooter_Character, bDisable_Gameplay);
@@ -146,8 +238,19 @@ void AShooter_Character::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &O
 
 void AShooter_Character::OnRep_ReplicatedMovement()
 {
+	/*This function is only for characters which are not locally contolled*/
+
+
+	//"Super" calls the original version of the function before it is overriden.
 	Super::OnRep_ReplicatedMovement();
+	
+	//Calling "Simulated_Proxies_Turn()" here instead of tick because for some reason when debugging while calling "Simulated_Proxies_Turn()"
+	//in the tick fucntion the values of the Proxy_Yaw (the delta) kept resseting to "0" every one to two frames even though the controller was 
+	//constantly rotating.
+	//Calling "Simulated_Proxies_Turn() to see if ther is a change in the status of the simulated proxy, if there is OnRep_ReplicatedMovement()
+	//will replicate the change."
 	Simulated_Proxies_Turn();
+	//Since replication just happened "Time_Since_Last_Movement_Replication" will be reset to "0". 
 	Time_Since_Last_Movement_Replication = 0.f;
 }
 
@@ -243,20 +346,6 @@ void AShooter_Character::Destroyed()
 	if(Combat && Combat->Equipped_Weapon && bMatch_Is_not_In_Progress)
 	{
 		Combat->Equipped_Weapon->Destroy();
-	}
-}
-
-void AShooter_Character::PostInitializeComponents()
-{
-	Super::PostInitializeComponents();
-	if(Combat)
-	{
-		Combat->Character = this;
-	}
-	if(Buff)
-	{
-		Buff->Character = this;
-		Buff->Set_Initial_Speeds(GetCharacterMovement()->MaxWalkSpeed, GetCharacterMovement()->MaxWalkSpeedCrouched);
 	}
 }
 
@@ -399,57 +488,86 @@ void AShooter_Character::Recieve_Damage(AActor *Damaged_Actor, float Damage, con
 	
 }
 
-void AShooter_Character::Move_Forward(float Value)
+void AShooter_Character::Move(const FInputActionValue& Value)
 {
 	if(bDisable_Gameplay) return;
 
-	if(Controller != nullptr && Value != 0.f)
+	// Must convert from "const FInputActionValue& Value" input parameter to a Vector3D.
+	const FVector3d Movement_Vector{Value.Get<FVector3d>()};
+
+	if (Controller != nullptr)
 	{
-		const FRotator Yaw_Rotation(0.f, Controller->GetControlRotation().Yaw, 0.f);
-		const FVector Direction(FRotationMatrix(Yaw_Rotation).GetUnitAxis(EAxis::X));
-		AddMovementInput(Direction, Value);
+		/*Get the controllers forward direction not the characters forward vector.*/
+
+		//Get the controllers rotation.
+		const FRotator Rotation{Controller->GetControlRotation()};
+		// Set which way is forward by initializing "X" and "Z" to "0" and setting "Y" (Unreal Engine's forward direction) to equal
+		//Rotation.Yaw.
+		const FRotator YawRotation(0, Rotation.Yaw, 0);
+
+		// Get controller forward vector          
+		const FVector ForwardDirection{FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X)};
+	
+		// Get controllers right vector 
+		const FVector RightDirection{FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y)};
+
+		// Add movement 
+		AddMovementInput(ForwardDirection, Movement_Vector.Y);
+		AddMovementInput(RightDirection, Movement_Vector.X);
+	}
+	
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Move() failed within &AShooter_Character"));
 	}
 }
 
-void AShooter_Character::Move_Right(float Value)
+void AShooter_Character::Look(const FInputActionValue& Value)
 {
-	if(bDisable_Gameplay) return;
+	// Must convert from "const FInputActionValue& Value" input parameter to a Vector3D.
+	FVector3d Look_Axis_Vector{Value.Get<FVector3d>()};
 
-	if(Controller != nullptr && Value != 0.f)
+	if (Controller != nullptr)
 	{
-		const FRotator Yaw_Rotation(0.f, Controller->GetControlRotation().Yaw, 0.f);
-		const FVector Direction(FRotationMatrix(Yaw_Rotation).GetUnitAxis(EAxis::Y));
-		AddMovementInput(Direction, Value);
+		// Add yaw and pitch input to controller
+		AddControllerYawInput(Look_Axis_Vector.X);
+		AddControllerPitchInput(-Look_Axis_Vector.Y);
 	}
-}
-
-void AShooter_Character::Turn(float Value)
-{
-	AddControllerYawInput(Value);
-}
-
-void AShooter_Character::Look_Up(float Value)
-{
-	AddControllerPitchInput(Value);
+	
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Look() failed within &AShooter_Character"));
+	}
 }
 
 void AShooter_Character::Equip_Button_Pressed()
 {
 	if(bDisable_Gameplay) return;
+	//Making sure the "UCombat_Component" pointer is valid before moving forward.
 	if(Combat)
 	{
+		//Calling "Server_Equip_Button_Pressed()" so the server can authorize and equip the weapon 
+		//on the respective "AShooter_Character" which called the "Equip_Button_Pressed()" function. 
 		Server_Equip_Button_Pressed();
 	}
 }
 
 void AShooter_Character::Server_Equip_Button_Pressed_Implementation()
 {
+	/*In Unreal Engine, RPCs must have an "_Implementation" at the end of their definition name (only within the .cpp file). This is because Unreal Engine will 
+	perform actions to modify the impementation of the definition so it behaves accordingly.*/
+	
+	//Making sure the "UCombat_Component" pointer is valid before accessing it.
 	if(Combat)
 	{
+		//Making sure the "AWeapon" pointer Overlapping_Weapon is valid before accessing
 		if(Overlapping_Weapon)
 		{
+			//Notifying "UCombat_Component" to "Equip_Weapon" with the "Overlapping_Weapon".
 			Combat->Equip_Weapon(Overlapping_Weapon);
 		}
+		//Checking to see if the "AShooter_Character" has two "AWeapon" equipped. If this is the case call Swap_Weapons()
+		//which is located in UCombat_Component.
 		else if (Combat->Should_Swap_Weapons())
 		{
 			Combat->Swap_Weapons();
@@ -459,13 +577,15 @@ void AShooter_Character::Server_Equip_Button_Pressed_Implementation()
 
 void AShooter_Character::Crouch_Button_Pressed()
 {
-	if(bIsCrouched)
+	/*bIsCrouched && Crouch() && UnCrouch() are inherited from "&ACharacter". Replication is already set up by Unreal Engine*/
+	
+	if(!bIsCrouched)
 	{
-		UnCrouch();
+		Crouch();
 	}
 	else
 	{
-		Crouch();
+		UnCrouch();
 	}
 }
 
@@ -481,54 +601,111 @@ void AShooter_Character::Reload_Button_Pressed()
 
 void AShooter_Character::Aim_Button_Pressed()
 {
+	/*Called on the server only*/
+	
+	//Safety check
 	if(Combat && !Combat->bSprinting && Get_Combat_State() != ECombat_State::ECS_Reloading)
-	{
+	{	
+		//Access "&UCombat_Component::Set_Aiming()" passing in true.
+		//"Set_Aiming()" passes in the value of the input parameter which is set here, to the variable 
+		//"&UCombat_Component::bAiming" within "&UCombat_Component::Set_Aiming().
+		//"&UCombat_Component::bAiming" is retrieved from return bool fucntion "&AShooter_Character::Is_Aiming()"
+		//Shooter_Anim_Instance access the return value of "&AShooter_Character::Is_Aiming()" to determine wheather or not to
+		//change the animation pose.
 		Combat->Set_Aiming(true);
 	}
 }
 
 void AShooter_Character::Aim_Button_Released()
-{
+{	
+	//Checking to see wheather or not pointer to "&UCombat_Component" is valid.
 	if(Combat)
 	{
+		//Access "&UCombat_Component::Set_Aiming()" passing in false.
+		//"Set_Aiming()" passes in the value of the input parameter which is set here, to the variable 
+		//"&UCombat_Component::bAiming" within "&UCombat_Component::Set_Aiming().
+		//"&UCombat_Component::bAiming" is retrieved from return bool fucntion "&AShooter_Character::Is_Aiming()"
+		//Shooter_Anim_Instance access the return value of "&AShooter_Character::Is_Aiming()" to determine wheather or not to
+		//change the animation pose.  
 		Combat->Set_Aiming(false);
 	}
 }
 
+bool AShooter_Character::Is_Aiming()
+{
+	/*See &AShooter_Character::Aim_Button_Pressed() && &AShooter_Character::Aim_Button_Released() */
+
+	//Return value is used by "&Shooter_Anim_Instance" to determine whether or not "AShooter_Character" is aiming.
+    return (Combat && Combat->bAiming);
+}
+
 float AShooter_Character::Calculate_Speed()
 {
-	FVector Velocity = GetVelocity();
+	FVector Velocity{GetVelocity()};
     Velocity.Z = 0.f;
     return Velocity.Size();
 }
 
 void AShooter_Character::Aim_Offset(float DeltaTime)
-{
+{	
+	/*This function is only for locally contolled characters*/
+	
+	//Safety check
 	if(Combat && Combat->Equipped_Weapon == nullptr || Combat->bSprinting == true) return;
-    float Speed = Calculate_Speed();
-	bool bIs_In_Air = GetCharacterMovement()->IsFalling();
+    
+	float Speed{Calculate_Speed()};
+	bool bIs_In_Air{GetCharacterMovement()->IsFalling()};
 
-	if(Speed == 0.f && !bIs_In_Air) //Standing still and not jumping.
+	//Checking to see if the character is stationary and not jumping. When these two conditions are true
+	//The charcter may adjust the AO_Yaw value within the Aim Offsets which in result will rotate the upper body while
+	// the lower body remains facing its initial direction. Once the upper body reaches the threshold of rotation the lower
+	//body will rotate to realign with the upper body. The "Current_Aim_Rotation" while "standing still and not jumping" 
+	//will be stored using "GetBaseAimRotation().Yaw"
+	if(Speed == 0.f && !bIs_In_Air) //Standing still and not jumping. 
 	{
+		//Enable "bRotate_Root_Bone" so that turning in place may happen once the threshold for rotating the upper body is met.
 		bRotate_Root_Bone = true;
-		FRotator Current_Aim_Rotation = FRotator(0.f, GetBaseAimRotation().Yaw, 0.f);
-		FRotator Delta_Aim_Rotation = UKismetMathLibrary::NormalizedDeltaRotator(Current_Aim_Rotation, Starting_Aim_Rotation);
+		//The controllers rotation Yaw while the character is standing still and not jumping.
+		FRotator Current_Aim_Rotation{FRotator(0.f, GetBaseAimRotation().Yaw, 0.f)};
+		//The delta between the  and the "Current_Aim_Rotation" which the controllers Yaw while standing still and the 
+		//"Starting_Aim_Rotation" which is the default controller Yaw when the character is not running or jumping 
+		//(facing directly ahead/ away from the camera).
+		FRotator Delta_Aim_Rotation{UKismetMathLibrary::NormalizedDeltaRotator(Current_Aim_Rotation, Starting_Aim_Rotation)};
+		//Assign the value of the "Delta_Aim_Rotation.Yaw" to AO_Yaw.
 		AO_Yaw = Delta_Aim_Rotation.Yaw;
+		
+		
+		//If the character is not "Turning_In_Place" "Interp_AO_Yaw" needs to be the same value as "AO_Yaw".
+		//This is because when "Turning_In_Place" is activated "Interp_AO_Yaw" will interpolate to "0"
+		//and "AO_Yaw will = Interp_AO_Yaw". In result so that the lower body will be able to turn in place 
+		//and meet the rotation of the upper body while the upper body remains at it's current yaw rotation. 
 		if(Turning_In_Place == ETurning_In_Place::ETIP_Not_Turning)
 		{
 			Interp_AO_Yaw = AO_Yaw;
 		}
+		//The root bone needs to remain still until "Turning_In_Place is activated, only then should the character turn in the appropriate
+		//direction. Using a "Rotate Root Bone" node in ABP_Shooter to keep the root bone from rotating with the yaw of the controller."
 		bUseControllerRotationYaw = true;
 
 		//Turning in place.
 		Turn_In_Place(DeltaTime);
 	}
+	
+	//Checking to see if the character is running or jumping. When these two conditions are true
+	//The charcter is facing directly away from the camera straight ahead with no offsets. This can be used to get the "GetBaseAimRotation().Yaw"
+	//and store it as "Starting_Aim_Rotation". Ultimately the Aim_Offset.Yaw is the delta between "Starting_Aim_Rotation" and "Current_Aim_Rotation".
 	if(Speed > 0.f || bIs_In_Air) // Running or jumping.
 	{
+		//Diable "bRotate_Root_Bone" so that turning in place does not occur when the character (bIs_Accelerating).
 		bRotate_Root_Bone = false;
+		//Controller rotation Yaw when the character (bIs_Accelerating)
 		Starting_Aim_Rotation = FRotator(0.f, GetBaseAimRotation().Yaw, 0.f);
+		//When the character is accelerating "AO_Yaw" should remian at "0". The goal is to keep the character's 
+		//upper body from rotating while (bIs_Accelerating) or (bIs_In_Air).
 		AO_Yaw = 0.f;
+		//Enable "bUseControllerRotationYaw"
 		bUseControllerRotationYaw = true;
+		//Should not be "Turning_In_Place" if the character is (bIs_Accelerating) || (bIsFalling).
 		Turning_In_Place = ETurning_In_Place::ETIP_Not_Turning;
 	}
 
@@ -537,10 +714,16 @@ void AShooter_Character::Aim_Offset(float DeltaTime)
 
 void AShooter_Character::Rotate_In_Place(float DeltaTime)
 {
+	//Only use Aim_Offset on the character that is AutonomousProxy, Authority and is Locally Controlled.
 	if(GetLocalRole() > ENetRole::ROLE_SimulatedProxy && IsLocallyControlled())
 	{
 		Aim_Offset(DeltaTime);
 	}
+	
+	//If the character is a SimulatedProxy "OnRep_ReplicatedMovement()" will handle the different method of "Turning_In_Place".
+	//For this to happen there needs to be a check to keep track of the time since the movement was last replicated. If this value
+	//becomes greater than the set value "OnRep_ReplicatedMovement()" will be called and the timer (Time_Since_Last_Movement_Replication) 
+	//will reset to "0" as defined in "&AShooter_Character::OnRep_ReplicatedMovement"
 	else
 	{
 		Time_Since_Last_Movement_Replication += DeltaTime;
@@ -548,19 +731,37 @@ void AShooter_Character::Rotate_In_Place(float DeltaTime)
 		{
 			OnRep_ReplicatedMovement();
 		}
+		
+		//Calculate the AO_pitch for the simulated proxies every tick.
 		Calculate_AO_Pitch();
 	}
 }
 
 void AShooter_Character::Calculate_AO_Pitch()
 {
+	/*Unreal Engine serializes and compresses the pitch and the roll of the character via &CharacterMovementComponent::GetPackedAngles()
+	when sending the values across the network. This means the values no longer go from -90 degrees to 90 degrees. This is because when 
+	the the data is recieved on the receivers end of the network, the values are decompressed and in result the values are in a range of
+	0 degrees to 360 degrees. (Once the pitch "goes beyond "0" towards the negative values due to compression it shoots up to 360 
+	and begins to decrease until it raches 270 degrees).*/
+	
+	
+	//Getting the pitch from the controllers rotation.
 	AO_Pitch = GetBaseAimRotation().Pitch;
+
+	//To fix the problem caused by the compression of the the pitch, a check to make sure the pitch is above 90 degrees &&
+	//is not locally controlled (a simulated proxy) must be made
 	if(AO_Pitch > 90.f && !IsLocallyControlled())
 	{
-		//map pitch from [270, 360) to [-90, 0)
+		/*map pitch from the range [270, 360) to the range [-90, 0)*/
+		
+		//Current pitch will be in this range when viewing a character who is a simulated proxy.
 		FVector2D In_Range(270.f, 360.f);
+		//Range to fix the compression problem "In_Range"
 		FVector2D Out_Range(-90.f, 0.f);
-		AO_Pitch = FMath::GetMappedRangeValueClamped(In_Range, Out_Range, AO_Pitch);
+		//Apply the correction to the pitch of the sumulated proxy by using "FMath::GetMappedRangeValueClamped" 
+		AO_Pitch = FMath::GetMappedRangeValueClamped(In_Range, Out_Range, AO_Pitch); //Check AO_Pitch and if it's in the "In_Range" 
+		                                                                             //convert the values to the "Out_Range." 
 	}
 	
 	//Used to fix pitch on server character
@@ -570,39 +771,94 @@ void AShooter_Character::Calculate_AO_Pitch()
 	}*/
 }
 
+void AShooter_Character::Turn_In_Place(float DeltaTime)
+{
+	//UE_LOG(LogTemp, Warning, TEXT("AO_Yaw %f"), AO_Yaw);
+	
+	/*Determine wheather to turn in place in the direction of left or right*/
+
+	//Turn right
+	if(AO_Yaw > 90.f)
+	{
+		Turning_In_Place = ETurning_In_Place::ETIP_Right;
+	}
+	//Turn left
+	else if (AO_Yaw < -90.f)
+	{
+		Turning_In_Place = ETurning_In_Place::ETIP_Left;
+	}
+	
+	//Checing to see if the character is turning left or right.
+	//If the character is "Turning_In_Place", "Interp_AO_Yaw" needs to interpolate to "0". While this is happening
+	//"AO_Yaw will = Interp_AO_Yaw" and in result that the lower body will be able to turn in place and meet the rotation of the upper body.
+	//while the upper body remains at it's current yaw rotation. 
+	if(Turning_In_Place != ETurning_In_Place::ETIP_Not_Turning)
+	{
+		Interp_AO_Yaw = FMath::FInterpTo(Interp_AO_Yaw, 0.f, DeltaTime, 5.f);
+		AO_Yaw = Interp_AO_Yaw;
+
+		//Checking the absolute value of the "AO_Yaw" which is interpolating to "0" with "Interp_AO_Yaw" 
+		//to see if the character has turned enough.
+		if(FMath::Abs(AO_Yaw) < 8.f)
+		{
+			
+			//If "AO_Yaw" which is interpolating to "0" with "Interp_AO_Yaw"
+			//gets to any value below 8 degrees, set enum class "ETurning_In_Place"
+			//to "Not_Turning" && reset the "Starting_Aim_Rotation" (see &AShooter_Character::Aim_Offset 4th "if" statement for explanation).
+			Turning_In_Place = ETurning_In_Place::ETIP_Not_Turning;
+			Starting_Aim_Rotation = FRotator(0.f, GetBaseAimRotation().Yaw, 0.f); 
+		}
+	}
+}
+
 void AShooter_Character::Simulated_Proxies_Turn()
 {
+	/*This function is only for characters which are not locally contolled*/
+
+	//Safety check
 	if(Combat == nullptr || Combat->Equipped_Weapon == nullptr) return;
-	
+	//Disable the use of rotating the root bone. Simulated proxies will not depend on the use of this node.
 	bRotate_Root_Bone = false;
-	float Speed = Calculate_Speed();
+	//If the simulated proxy (bIs_Accelerating) set enum class "ETurning_In_Place" to "Not_Turning" then return.
+	float Speed{Calculate_Speed()};
 	if(Speed > 0.f)
 	{
 		Turning_In_Place = ETurning_In_Place::ETIP_Not_Turning;
 		return;
 	}
 
+	//The value of "Proxy_Rotation_Last_Frame" will always be a little begind the value of "Proxy_Rotation".
+    //This is because once "Proxy_Rotation" updates on the next tick, "Proxy_Rotation_Last_Frame" will not update until
+    //the tick after that. Hence causing it to always be the previous value of "Proxy_Rotation" current value.
 	Proxy_Rotation_Last_Frame = Proxy_Rotation;
+	//The rotation of the "RootComponent"/Capsule Component
 	Proxy_Rotation = GetActorRotation();
+	//Use "NormalizedDeltaRotator" to calculate the difference between "Proxy_Rotation" && "Proxy_Rotation_Last_Frame".
 	Proxy_Yaw = UKismetMathLibrary::NormalizedDeltaRotator(Proxy_Rotation, Proxy_Rotation_Last_Frame).Yaw;
 
 	//UE_LOG(LogTemp, Warning, TEXT("Proxy Yaw %f"), Proxy_Yaw);
 
+	//Checking to see if the absolute value of "Proxy_Yaw" is greater than the "Turn_Threshold" which is initialized to ".5f" (degrees). 
 	if(FMath::Abs(Proxy_Yaw) > Turn_Threshold)
-	{	if(Proxy_Yaw > Turn_Threshold)
+	{	
+		//If "Proxy_Yaw" is greater than "Turn_Threshold" turn right.
+		if(Proxy_Yaw > Turn_Threshold)
 		{
 			Turning_In_Place = ETurning_In_Place::ETIP_Right;
 		}
+		//If "Proxy_Yaw" is less than "-Turn_Threshold" turn left.
 		else if (Proxy_Yaw < -Turn_Threshold)
 		{
 			Turning_In_Place = ETurning_In_Place::ETIP_Left;
 		}
+		//If neither are true then the simulated proxy is not turning.
 		else
 		{
 			Turning_In_Place = ETurning_In_Place::ETIP_Not_Turning;
 		}
 		return;
 	}
+	//If this line of code is reached, then the above if check was never entered. In result set enum class "ETurning_In_Place" to "ETIP_Not_Turning"
 	Turning_In_Place = ETurning_In_Place::ETIP_Not_Turning;
 }
 
@@ -623,7 +879,7 @@ void AShooter_Character::Sprint_Button_Pressed()
 		}
 		else
 		{
-			Combat->Sprint_Button_Pressed(true);
+			Combat->Set_Sprinting(true);
 		}
 	}
 }
@@ -632,7 +888,7 @@ void AShooter_Character::Sprint_Button_Released()
 {
 	if(bDisable_Gameplay) return;
 
-	Combat->Sprint_Button_Pressed(false);
+	Combat->Set_Sprinting(false);
 }
 
 void AShooter_Character::Jump()
@@ -666,30 +922,6 @@ void AShooter_Character::Fire_Button_Released()
 	{
 		Combat->Fire_Button_Pressed(false);
 	}
-}
-
-void AShooter_Character::Turn_In_Place(float DeltaTime)
-{
-	//UE_LOG(LogTemp, Warning, TEXT("AO_Yaw %f"), AO_Yaw);
-	if(AO_Yaw > 90.f)
-	{
-		Turning_In_Place = ETurning_In_Place::ETIP_Right;
-	}
-	else if (AO_Yaw < -90.f)
-	{
-		Turning_In_Place = ETurning_In_Place::ETIP_Left;
-	}
-	if(Turning_In_Place != ETurning_In_Place::ETIP_Not_Turning)
-	{
-		Interp_AO_Yaw = FMath::FInterpTo(Interp_AO_Yaw, 0.f, DeltaTime, 5.f);
-		AO_Yaw = Interp_AO_Yaw;
-		if(FMath::Abs(AO_Yaw) < 15.f)
-		{
-			Turning_In_Place = ETurning_In_Place::ETIP_Not_Turning;
-			Starting_Aim_Rotation = FRotator(0.f, GetBaseAimRotation().Yaw, 0.f); 
-		}
-	}
-	
 }
 
 void AShooter_Character::Hide_Camera_When_Character_Is_Close()
@@ -773,29 +1005,51 @@ void AShooter_Character::Poll_Initialize()
 	}
 }
 
-void AShooter_Character::Set_Overlapping_Weapon(AWeapon *Weapon)
+void AShooter_Character::Set_Overlapping_Weapon(AWeapon* Weapon)
 {
+	/*ONLY CALLED ON THE SERVER*/
+
+	//Taking care of displaying the "Pickup_Widget" on the Server if overlapping events are occurring.
+	//The rep notify "OnRep_Overlapping_Weapon()" will never be called on the server because replication only happens on the
+	//clients. Therefore the logic in this function will only be called on the server. 
+
+	//Making sure "Overlapping_Weapon" isn't a null pointer. 
 	if(Overlapping_Weapon != nullptr)
-		{
-			Overlapping_Weapon->Show_Pickup_Widget(false);
-		}
-	Overlapping_Weapon = Weapon;
-	if(IsLocallyControlled())
 	{
+		//Setting the default visibility to false before setting the value of "Overlapping_Weapon" = "Weapon". 
+		Overlapping_Weapon->Show_Pickup_Widget(false);
+	}
+
+	Overlapping_Weapon = Weapon;
+
+	//Checking to see if the server is controlling the "AShooter_Character" pawn that is causeing overlapping events to occur.
+	if(IsLocallyControlled())
+	{	
+		//Making sure "Overlapping_Weapon" isn't a null pointer.
 		if(Overlapping_Weapon != nullptr)
 		{
 			Overlapping_Weapon->Show_Pickup_Widget(true);
 		}
-
 	}
 }
 
 void AShooter_Character::OnRep_Overlapping_Weapon(AWeapon* Last_Weapon)
 {
+	/*ONLY CALLED ON CLIENTS*/
+
+	//Taking care of displaying the pickup widget on the client which "Overlapping_Weapon" replicates to. 
+
+	//Making sure "Overlapping_Weapon" isn't a null pointer. This is because the server may have set it to be null and in
+	//result that change will replicate to all clients. 
 	if(Overlapping_Weapon != nullptr)
 	{
 		Overlapping_Weapon->Show_Pickup_Widget(true);
 	}
+
+	//Do to the fact that "Last_Weapon" stores the last state of the variable which is being replicated aka "Overlapping_Weapon" 
+	//before the most recent replication occured, the visibility of the "Pickup_Widget" may be set to false once overlapping events
+	//end in "AWeapon::On_Sphere_End_Overlap" because "Last_Weapon" will still have the valid data. 
+
 	if(Last_Weapon != nullptr)
 	{
 		Last_Weapon->Show_Pickup_Widget(false);
@@ -804,17 +1058,33 @@ void AShooter_Character::OnRep_Overlapping_Weapon(AWeapon* Last_Weapon)
 
 bool AShooter_Character::Is_Weapon_Equipped()
 {
-    return (Combat && Combat->Equipped_Weapon);
-}
+	//Check to see if the pointer to the "UCombat_Component" component class is valid within this class.
+	//Check to see if the "AWeapon" pointer "Equipped_Weapon" which is within the "UCombat_Component" is valid.
+	
+	/*Equipped_Weapon" which an "AWeapon" pointer gets information passed into it via the variable "Weapon_To_Equip" (an input parameter 
+	at &Combat_Component::. "Weapon_To_Equip" gets information passed into it via the overlapping events which happen at "&AWeapon::On_Sphere_Overlap".
+	"&AWeapon::On_Sphere_Overlap" passes in the weapon which is in close proximity of the "AShooter_Character" to this class via "&AWeapon::On_Sphere_Overlap". 
+	&AShooter_Character::Set_Overlapping_Weapon receives the information and passes said information to the "AWeapon" pointer "Overlapping_Weapon". The visibilty of the 
+	"Pickup_Widget is then enebled or disabled accordingly when the "AShooter_Character" picks up or drops the weapon*/
 
-bool AShooter_Character::Is_Aiming()
-{
-    return (Combat && Combat->bAiming);
+	//Therefore,
+	//Check to see if the pointer to the "UCombat_Component" component class is valid within this class.
+	//Check to see if the "AWeapon" pointer "Equipped_Weapon" which is within the "UCombat_Component" is valid. If it is valid a weapon is equipped.
+	//Shooter_Anim_Instance uses this return value.
+    
+	return (Combat && Combat->Equipped_Weapon);
 }
 
 AWeapon *AShooter_Character::Get_Equipped_Weapon()
 {
+	/*"UShooter_Anim_Instance" uses this getter function to retrieve the weapon which is equipped*/
+
+
+	//Check to see if the pointer to "UCombat_Component" is valid before accessing it". 
+	//If it returns null pointer, return nullptr:
    if(Combat == nullptr) return nullptr;
+   	//If the pointer to "UCombat_Component" is valid return the "Equipped_Weapon"
+	//There is no way for the pointer to "UCombat_Component" to be valid without an "Equipped_Weapon" being valid. 
 	return Combat->Equipped_Weapon;
 }
 

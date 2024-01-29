@@ -45,6 +45,10 @@ public:
 
 	UPROPERTY(meta = (BindWidget))
 	UTextBlock* Grenades_Text;
-	
-	
+
+	UPROPERTY(meta = (BindWidget))
+	class UImage* Packet_Image;
+
+	UPROPERTY(meta = (BindWidgetAnim), Transient)
+	UWidgetAnimation* Packet_Animation;
 };

@@ -12,6 +12,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Shooter_Online/Shooter_Components/Combat_Component.h"
 #include "Shooter_Online/Game_State/Shooter_Online_Game_State.h"
+#include "Components/Image.h"
 
 
 void AShooter_Player_Controller::BeginPlay()
@@ -32,6 +33,9 @@ void AShooter_Player_Controller::Tick(float DeltaTime)
     Check_Time_Sync(DeltaTime);
 
     Poll_Initialized();
+
+    Check_Ping(DeltaTime);
+
 }
 
 void AShooter_Player_Controller::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifetimeProps) const
@@ -48,6 +52,75 @@ void AShooter_Player_Controller::Check_Time_Sync(float DeltaTime)
     {
         Server_Request_Server_Time(GetWorld()->GetTimeSeconds());
         Time_Sync_Running_Time = 0.f;
+    }
+}
+
+void AShooter_Player_Controller::Check_Ping(float DeltaTime)
+{
+    High_Ping_Running_Time += DeltaTime;
+    if(High_Ping_Running_Time > Check_Ping_Frequency)
+    {
+        PlayerState = PlayerState == nullptr ? GetPlayerState<AShooter_Player_State>() : PlayerState;
+        
+        if(PlayerState)
+        {
+            //Ping is compressed. Unreal Engine devides the actual ping by 4 so the value can fit in a int32.
+            if(PlayerState->GetPingInMilliseconds() * 4 > High_Ping_Threshold)
+            {
+                High_Ping_Warning();
+                Ping_Animation_Running_Time = 0;
+            }
+            High_Ping_Running_Time = 0.f;
+        }
+    }
+    bool High_Ping_Animation_Playing =
+    Shooter_HUD && 
+    Shooter_HUD->Character_Overlay && 
+    Shooter_HUD->Character_Overlay->Packet_Animation && 
+    Shooter_HUD->Character_Overlay->IsAnimationPlaying(Shooter_HUD->Character_Overlay->Packet_Animation);
+
+    if(High_Ping_Animation_Playing)
+    {
+       Ping_Animation_Running_Time += DeltaTime;
+       if(Ping_Animation_Running_Time > High_Ping_Duration)
+       {
+         Stop_High_Ping_Warning();
+       }
+    }
+}
+
+void AShooter_Player_Controller::High_Ping_Warning()
+{
+    Shooter_HUD = Shooter_HUD = nullptr ? Cast<AShooter_HUD>(GetHUD()) : Shooter_HUD;
+    
+    bool bHud_Is_Valid = Shooter_HUD && 
+    Shooter_HUD->Character_Overlay && 
+    Shooter_HUD->Character_Overlay->Packet_Image && 
+    Shooter_HUD->Character_Overlay->Packet_Animation;
+   
+    if(bHud_Is_Valid)
+    {
+       Shooter_HUD->Character_Overlay->Packet_Image->SetOpacity(1.f);
+       Shooter_HUD->Character_Overlay->PlayAnimation(Shooter_HUD->Character_Overlay->Packet_Animation, 0.f, 7);
+    }
+}
+
+void AShooter_Player_Controller::Stop_High_Ping_Warning()
+{
+    Shooter_HUD = Shooter_HUD = nullptr ? Cast<AShooter_HUD>(GetHUD()) : Shooter_HUD;
+    
+    bool bHud_Is_Valid = Shooter_HUD && 
+    Shooter_HUD->Character_Overlay && 
+    Shooter_HUD->Character_Overlay->Packet_Image && 
+    Shooter_HUD->Character_Overlay->Packet_Animation;
+   
+    if(bHud_Is_Valid)
+    {
+       Shooter_HUD->Character_Overlay->Packet_Image->SetOpacity(0.f);
+       if(Shooter_HUD->Character_Overlay->IsAnimationPlaying( Shooter_HUD->Character_Overlay->Packet_Animation))
+       {
+            Shooter_HUD->Character_Overlay->StopAnimation(Shooter_HUD->Character_Overlay->Packet_Animation);
+       }
     }
 }
 

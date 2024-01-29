@@ -77,6 +77,11 @@ protected:
 	UFUNCTION(Client, Reliable)
 	void Client_Join_Mid_Game(float Warmup, float Match, float Cooldown, float Starting_Time, FName State_Of_Match);
 
+
+	void Check_Ping(float DeltaTime);
+	void High_Ping_Warning();
+	void Stop_High_Ping_Warning();
+
 private:
 
 	UPROPERTY()
@@ -117,6 +122,20 @@ private:
 	float HUD_Score = 0.f;
 	int32 HUD_Deaths = 0;
 	int32 HUD_Grenades = 0;
+
+	float High_Ping_Running_Time = 0.f;
+	
+	UPROPERTY(EditDefaultsOnly)
+	float High_Ping_Duration = 7.f;
+
+	UPROPERTY(EditDefaultsOnly)
+	float Ping_Animation_Running_Time = 0;
+
+	UPROPERTY(EditDefaultsOnly)
+	float Check_Ping_Frequency = 20.f;
+
+	UPROPERTY(EditDefaultsOnly)
+	float High_Ping_Threshold = 50.f;
 	
 	
 };

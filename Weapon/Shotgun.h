@@ -17,6 +17,7 @@ class SHOOTER_ONLINE_API AShotgun : public AHit_Scan_Weapon
 public:
 
 	virtual void Fire(const FVector& Hit_Target) override;
+	void Shotgun_Trace_End_With_Scatter(const FVector& Hit_Target, TArray<FVector>& Hit_Targets);
 
 
 private:

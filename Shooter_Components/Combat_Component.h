@@ -9,6 +9,11 @@
 #include "Shooter_Online/Shooter_Types/Combat_State.h"
 #include "Combat_Component.generated.h"
 
+class AWeapon;
+class AShooter_Character;
+class AShooter_Player_Controller;
+class AShooter_HUD;
+
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class SHOOTER_ONLINE_API UCombat_Component : public UActorComponent
 {
@@ -18,6 +23,8 @@ public:
 	// Sets default values for this component's properties
 	UCombat_Component();
 
+	/*"AShooter_Character" and "UCombat_Component" are dependent on each other, therefore "AShooter_Character" gets full access 
+	//to all of the vairables and functions decalred on "UCombat_Component".*/
 	friend class AShooter_Character;
 	
 	// Called every frame
@@ -27,7 +34,8 @@ public:
 
 	void Spawn_Default_Weapon();
 
-	void Equip_Weapon(class AWeapon* Weapon_To_Equip);
+	//Equips the weapon. "Overlapping_Weapon" in "AShooter_Character" passes in information to "Weapon_To_Equip".
+	void Equip_Weapon(AWeapon* Weapon_To_Equip);
 	void Swap_Weapons();
 	void Fire_Button_Pressed(bool bPressed);
 	
@@ -56,18 +64,21 @@ protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
 	
+	//Sets wheather the character is aiming. Handles everyhting client and server side.
 	void Set_Aiming(bool bIs_Aiming);
 
+	//A remote procedure call that will ask the server for permission to aim a weapon for the "AShooter_Character" which called 
+	//*Inset_Function Here*.
+	//RPC must be declared with a "UFUNCTION" macro paired with the "UFUNCTION" specifier "Server".
+	//When an RPC is declared it must be initialized as "Reliable" or "Unreliable".
+	//"Reliable" RPCs will always be executed when called. On the other hand, depending on network conditions, "Unreliable" RPCs may fail execution.
+	//As the packets of data may be dropped during transit over the network.
+	//Reliable RPCs get confirmation when the server recieves the request. If there is no confirmation, the "Reliable" RPC will be sent again until
+	//a confirmation from the server is recieved.
+	//"Reliable RPCs should be used sparingly (only on high priority functions)"
+	//RPCs may be sent from client to server or from server to client.
 	UFUNCTION(Server, Reliable)
 	void Server_Set_Aiming(bool bIs_Aiming);
-
-	void Start_Sprinting_Unequipped(bool bIs_Sprinting);
-
-	void Stop_Sprinting_Unequipped(bool bIs_Sprinting);
-
-	void Start_Sprinting_Equipped(bool bIs_Sprinting);
-
-	void Stop_Sprinting_Equipped(bool bIs_Sprinting);
 
 	UFUNCTION(Server, Reliable)
 	void Server_Start_Sprinting_Unequipped(bool bIs_Sprinting);
@@ -81,37 +92,54 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void Server_Stop_Sprinting_Equipped(bool bIs_Sprinting);
 
-	UFUNCTION()
-	void OnRep_Equipped_Weapon();
-
-	UFUNCTION()
-	void On_Rep_Secondary_Weapon();
-
-	void Sprint_Button_Pressed(bool bPressed);
-
-	void Fire();
-
 	UFUNCTION(Server, Reliable)
 	void Server_Fire(const FVector_NetQuantize& Trace_Hit_Target);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_Fire(const FVector_NetQuantize& Trace_Hit_Target);
 
+	UFUNCTION(Server, Reliable)
+	void Server_Reload();
+
+	UFUNCTION(Server, Reliable)
+	void Server_Throw_Grenade();
+	
+
+	void Start_Sprinting_Unequipped(bool bIs_Sprinting);
+
+	void Stop_Sprinting_Unequipped(bool bIs_Sprinting);
+
+	void Start_Sprinting_Equipped(bool bIs_Sprinting);
+
+	void Stop_Sprinting_Equipped(bool bIs_Sprinting);
+	
+	UFUNCTION()
+	void OnRep_Equipped_Weapon();
+
+	UFUNCTION()
+	void On_Rep_Secondary_Weapon();
+
+	void Set_Sprinting(bool bPressed);
+
+	void Fire();
+
+	void Fire_Hit_Scan_Weapon();
+
+	void Fire_Projectile_Weapon();
+
+	void Fire_Shotgun();
+
+	void Local_Fire(const FVector_NetQuantize& Trace_Hit_Target);
+
 	void Trace_Under_Crosshairs(FHitResult& Trace_Hit_Result);
 
 	void Set_HUD_Crosshairs(float DeltaTime);
-
-	UFUNCTION(Server, Reliable)
-	void Server_Reload();
 
 	void Handle_Reload();
 
 	int32 Amount_To_Reload();
 
 	void Throw_Grenade();
-
-	UFUNCTION(Server, Reliable)
-	void Server_Throw_Grenade();
 
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<class AProjectile> Grenade_Class;
@@ -125,62 +153,77 @@ protected:
 	void Attach_Actor_To_Back(AActor* Actor_To_Attach);
 
 	void Update_Carried_Ammo();
-
+	
+	//"Overlapping_Weapon" in "AShooter_Character" passes in information to "Weapon_To_Equip".
 	void Play_Equip_Weapon_Sound(AWeapon* Weapon_To_Equip);
 
 	void Reload_Empty_Magazine();
 
 	void Show_Attached_Grenade(bool bShow_Grenade);
 
+	//"Overlapping_Weapon" in "AShooter_Character" passes in information to "Weapon_To_Equip".
 	void Equip_Primary_Weapon(AWeapon* Weapon_To_Equip);
-
+	//"Overlapping_Weapon" in "AShooter_Character" passes in information to "Weapon_To_Equip".
 	void Equip_Secondary_Weapon(AWeapon* Weapon_To_Equip);
 
 private:
+
+	//The Combat Component needs access to "AShooter_Character", so instead of casting a pointer will do.
 	UPROPERTY()
-	class AShooter_Character* Character;
+	AShooter_Character* Character;
 	UPROPERTY()
-	class AShooter_Player_Controller* Controller;
+	AShooter_Player_Controller* Controller;
 	UPROPERTY()
-	class AShooter_HUD* HUD;
+	AShooter_HUD* HUD;
 	
+	//Variable for storing the weapon currently equipped by "AShooter_Character".
+	//Is replicated using "OnRep_Equipped_Weapon" so all clients can be in the correct poses on all computers.
+	//Shooter_Anim_Instance relies on this replication.
+	//Must register all replicated variables in the overidden function "GetLifetimeReplicatedProps()".
 	UPROPERTY(ReplicatedUsing = OnRep_Equipped_Weapon)
 	AWeapon* Equipped_Weapon;
 
+	//Variable for storing the weapon currently equipped by "AShooter_Character".
+	//Is replicated using "OnRep_Equipped_Weapon" so all clients can be in the correct poses on all computers.
+	//Shooter_Anim_Instance relies on this replication.
+	//Must register all replicated variables in the overidden function "GetLifetimeReplicatedProps()".
 	UPROPERTY(ReplicatedUsing = On_Rep_Secondary_Weapon)
 	AWeapon* Secondary_Weapon;
 
+	//Sets the value for "&AShooter_Character::Is_Aiming()" to true or false. 
+	//Must register all replicated variables in the overidden function "GetLifetimeReplicatedProps()".
 	UPROPERTY(Replicated)
-	bool bAiming;
+	bool bAiming{};
 
+	//Must register all replicated variables in the overidden function "GetLifetimeReplicatedProps()".
 	UPROPERTY(Replicated)
-	bool bSprinting;
+	bool bSprinting{};
 
 	UPROPERTY(EditAnywhere)
-	float Base_Walk_Speed;
+	float Base_Walk_Speed{};
 	
 	UPROPERTY(EditAnywhere)
-	float Aim_Walk_Speed;
+	float Aim_Walk_Speed{};
 
 	UPROPERTY(EditAnywhere)
-	float Sprint_Speed;
+	float Sprint_Speed{};
 
-	bool bSprint_Button_Pressed;
-	bool bSprint_Button_Released;
+	bool bSprint_Button_Pressed{};
+	bool bSprint_Button_Released{};
 	
-	bool bFire_Button_Pressed;
+	bool bFire_Button_Pressed{};
 
 	/**
 	 * HUD & Crosshairs
 	*/
 	FHUDPackage HUD_Package;
 	
-	float Crosshair_Velocity_Factor;
-	float Crosshair_In_Air_Factor; 
-	float Crosshair_Aim_Factor;
-	float Crosshair_Firing_Weapon_Factor;
+	float Crosshair_Velocity_Factor{};
+	float Crosshair_In_Air_Factor{}; 
+	float Crosshair_Aim_Factor{};
+	float Crosshair_Firing_Weapon_Factor{};
 
-	FVector Hit_Target;
+	FVector Hit_Target{};
 
 	/**
 	 * Default Weapon
@@ -198,21 +241,21 @@ private:
 	float Default_FOV;
 
 	UPROPERTY(EditAnywhere, Category = "Combat")
-	float Zoomed_FOV = 33.f;
+	float Zoomed_FOV{33.f};
 
-	float Current_FOV;
+	float Current_FOV{};
 
 	UPROPERTY(EditAnywhere, Category = "Combat")
-	float Zoom_Interp_Speed = 25.f;
+	float Zoom_Interp_Speed{25.f};
 
 	void Interp_FOV(float DeltaTime);
 
 	/**
 	 * Automatic Firing of Weapons
 	*/
-	FTimerHandle Fire_Timer;
+	FTimerHandle Fire_Timer{};
 	
-	bool bCan_Fire = true;
+	bool bCan_Fire{true};
 
 	void Start_Fire_Timer();
 	void Fire_Timer_Finished();
@@ -220,6 +263,7 @@ private:
 	bool Can_Fire();
 
 	//Carried Ammo for the currently equipped weapon.
+	//Must register all replicated variables in the overidden function "GetLifetimeReplicatedProps()".
 	UPROPERTY(ReplicatedUsing = OnRep_Carried_Ammo)
 	int32 Carried_Ammo;
 
@@ -229,31 +273,32 @@ private:
 	TMap<EWeapon_Type, int32> Carried_Ammo_Map;
 
 	UPROPERTY(EditDefaultsOnly)
-	int32 Max_Carried_Ammo = 700;
+	int32 Max_Carried_Ammo{700};
 
 	UPROPERTY(EditDefaultsOnly)
-	int32 Starting_Pistol_Ammo = 12;
+	int32 Starting_Pistol_Ammo{12};
 
 	UPROPERTY(EditDefaultsOnly)
-	int32 Starting_Submachine_Gun_Ammo = 28;
+	int32 Starting_Submachine_Gun_Ammo{29};
 
 	UPROPERTY(EditDefaultsOnly)
-	int32 Starting_Assult_Rifle_Ammo = 32;
+	int32 Starting_Assult_Rifle_Ammo{32};
 
 	UPROPERTY(EditDefaultsOnly)
-	int32 Starting_Shotgun_Ammo = 8;
+	int32 Starting_Shotgun_Ammo{8};
 
 	UPROPERTY(EditDefaultsOnly)
-	int32 Starting_Sniper_Rifle_Ammo = 12;
+	int32 Starting_Sniper_Rifle_Ammo{12};
 
 	UPROPERTY(EditDefaultsOnly)
-	int32 Starting_Grenade_Launcher_Ammo = 4;
+	int32 Starting_Grenade_Launcher_Ammo{4};
 
 	UPROPERTY(EditDefaultsOnly)
-	int32 Starting_Rocket_Launcher_Ammo = 3;
+	int32 Starting_Rocket_Launcher_Ammo{3};
 
 	void Initialize_Carried_Ammo();
 
+	//Must register all replicated variables in the overidden function "GetLifetimeReplicatedProps()".
 	UPROPERTY(ReplicatedUsing = OnRep_Combat_State)
 	ECombat_State Combat_State = ECombat_State::ECS_Unoccupied;
 
@@ -264,11 +309,12 @@ private:
 
 	void Update_Shotgun_Ammo_Values();
 
+	//Must register all replicated variables in the overidden function "GetLifetimeReplicatedProps()".
 	UPROPERTY(ReplicatedUsing = On_Rep_Grenades)
-	int32 Grenades = 3;
+	int32 Grenades{3};
 
 	UPROPERTY(EditDefaultsOnly)
-	int32 Maximum_Grenades = 7;
+	int32 Maximum_Grenades{7};
 
 	UFUNCTION()
 	void On_Rep_Grenades();

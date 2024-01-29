@@ -19,6 +19,7 @@
 #include "Shooter_Online/Character/Shooter_Anim_Instance.h"
 #include "Shooter_Online/Weapon/Projectile.h"
 #include "Shooter_Online/Game_Mode/Shooter_Online_Game_Mode.h"
+#include "Shooter_Online/Weapon/Shotgun.h"
 
 // Sets default values for this component's properties
 UCombat_Component::UCombat_Component()
@@ -37,15 +38,21 @@ UCombat_Component::UCombat_Component()
 
 void UCombat_Component::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifetimeProps) const
 {
+	//"Super" calls the original version of the function before it is overriden.
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
+	/*REGISTER THE VARIABLES WHICH ARE TO BE REPLCIATED*/ //Must include  #include "Net/UnrealNetwork.h"
+
+			   //(Class which contains the replicated variable, Variable to Replicate).
 	DOREPLIFETIME(UCombat_Component, Equipped_Weapon);
 	DOREPLIFETIME(UCombat_Component, Secondary_Weapon)
 	DOREPLIFETIME(UCombat_Component, bAiming);
 	DOREPLIFETIME(UCombat_Component, bSprinting);
-	DOREPLIFETIME_CONDITION(UCombat_Component, Carried_Ammo, COND_OwnerOnly);
 	DOREPLIFETIME(UCombat_Component, Combat_State);
 	DOREPLIFETIME(UCombat_Component, Grenades);
+	
+						 //(Class which contains the replicated variable, Variable to Replicate, Condition of replication (COND_OwnerOnly only replicates to the owner of the pawn (this PC))).
+	DOREPLIFETIME_CONDITION(UCombat_Component, Carried_Ammo, COND_OwnerOnly);
 }
 
 // Called when the game starts
@@ -55,6 +62,7 @@ void UCombat_Component::BeginPlay()
 	
 	if(Character)
 	{
+		//Set the character's "MaxWalkSpeed" to equal "Base_Walk_Speed" (look at &UCombat_Component::UCombat_Component())
 		Character->GetCharacterMovement()->MaxWalkSpeed = Base_Walk_Speed;
 
 		if(Character->Get_Follow_Camera())
@@ -186,30 +194,49 @@ void UCombat_Component::Interp_FOV(float DeltaTime)
 }
 
 void UCombat_Component::Set_Aiming(bool bIs_Aiming)
-{
+{	
+	/*Called on the server only*/
+
+	//Safety check.
 	if(Character == nullptr || Equipped_Weapon == nullptr) return;
+	//Used by "&AShooter_Character" to set the return value of function "&AShooter_Character::Is_Aiming()" which ultimately gets accessed by the 
+	//"&Shooter_Anim_Instance" to change the pose of "&AShooter_Character".
 	bAiming = bIs_Aiming;
+	//Calling the server RPC to set the aiming on the client.
 	Server_Set_Aiming(bIs_Aiming);
+	//Checking to see if the pointer to "&Shooter_Character" is valid before accessing it.
 	if(Character)
 	{
+		//Setting the "MaxWalkSpeed" of the character depending on whether or not bIs_Aiming is true. 
 		Character->GetCharacterMovement()->MaxWalkSpeed = bIs_Aiming ? Aim_Walk_Speed : Base_Walk_Speed;
 	}
+	//Checking to see if the locally controlled character has "EWeapon_Type::EWT_Sniper_Rifle" equipped
 	if(Character->IsLocallyControlled() && Equipped_Weapon->Get_Weapon_Type() == EWeapon_Type::EWT_Sniper_Rifle)
 	{
+		//Enabling the scniper scope to be set to visible if the character is aiming with a sniper rifle.
 		Character->Show_Sniper_Scope_Widget(bIs_Aiming);
 	}
 }
 
 void UCombat_Component::Server_Set_Aiming_Implementation(bool bIs_Aiming)
 {
+	/*In Unreal Engine, RPCs must have an "_Implementation" at the end of their definition name (only within the .cpp file). This is because Unreal Engine will 
+	perform actions to modify the impementation of the definition so it behaves accordingly.*/
+
+	/*Replication only happens from the server to clients (One Way Street) therefore "bAiming = bIs_Aiming" must be sent to all clients from the server*/
+
+	//Used by "&AShooter_Character" to set the return value of function "&AShooter_Character::Is_Aiming()" which ultimately gets accessed by the 
+	//"&Shooter_Anim_Instance" to change the pose of "&AShooter_Character". 
 	bAiming = bIs_Aiming;
+	//Checking to see if the pointer to "&Shooter_Character" is valid before accessing it.
 	if(Character)
 	{
+		//Setting the "MaxWalkSpeed" of the character depending on whether or not bIs_Aiming is true. 
 		Character->GetCharacterMovement()->MaxWalkSpeed = bIs_Aiming ? Aim_Walk_Speed : Base_Walk_Speed;
 	}
 }
 
-void UCombat_Component::Sprint_Button_Pressed(bool bPressed)
+void UCombat_Component::Set_Sprinting(bool bPressed)
 {
 	bSprint_Button_Pressed = bPressed;
 	if(Character && bSprint_Button_Pressed)
@@ -335,16 +362,60 @@ void UCombat_Component::Fire()
 	{
 		/*FHitResult Hit_Result;
 		Trace_Under_Crosshairs(Hit_Result);*/
-		Server_Fire(Hit_Target);
+		//bCan_Fire = false;
 		if(Equipped_Weapon)
 		{
 			Crosshair_Firing_Weapon_Factor = .7f;
 			bCan_Fire = false;
+
+			switch(Equipped_Weapon->Fire_Type)
+			{
+				case EFire_Type::EFT_Projectile:
+					Fire_Projectile_Weapon();
+					break;
+
+				case EFire_Type::EFT_Hit_Scan:
+					Fire_Hit_Scan_Weapon();
+					break;
+
+				case EFire_Type::EFT_Shotgun:
+					Fire_Shotgun();
+					break;
+			}
 		}
 		Start_Fire_Timer();
 	}
 }
 
+void UCombat_Component::Fire_Hit_Scan_Weapon()
+{
+	if(Equipped_Weapon)
+	{
+		Hit_Target = Equipped_Weapon->bUse_Weapon_Scatter ? Equipped_Weapon->Trace_End_With_Scatter(Hit_Target) :Hit_Target;
+		Local_Fire(Hit_Target);
+		Server_Fire(Hit_Target);
+	}
+}
+
+void UCombat_Component::Fire_Projectile_Weapon()
+{
+	if(Equipped_Weapon)
+	{
+		Hit_Target = Equipped_Weapon->bUse_Weapon_Scatter ? Equipped_Weapon->Trace_End_With_Scatter(Hit_Target) :Hit_Target;
+		Local_Fire(Hit_Target);
+		Server_Fire(Hit_Target);
+	}
+}
+
+void UCombat_Component::Fire_Shotgun()
+{
+	AShotgun* Shotgun = Cast<AShotgun>(Equipped_Weapon);
+	if(Shotgun)
+	{	
+		TArray<FVector> Hit_Targets;
+		Shotgun->Shotgun_Trace_End_With_Scatter(Hit_Target, Hit_Targets);
+	}
+}
 void UCombat_Component::Start_Fire_Timer()
 {
 	if(Equipped_Weapon == nullptr || Character == nullptr) return;
@@ -375,6 +446,12 @@ void UCombat_Component::Server_Fire_Implementation(const FVector_NetQuantize& Tr
 
 void UCombat_Component::Multicast_Fire_Implementation(const FVector_NetQuantize& Trace_Hit_Target)
 {
+	if(Character && Character->IsLocallyControlled() && !Character->HasAuthority()) return;
+	Local_Fire(Trace_Hit_Target);
+}
+
+void UCombat_Component::Local_Fire(const FVector_NetQuantize& Trace_Hit_Target)
+{
 	if(Equipped_Weapon == nullptr) return;
 	
 	else if(Character && Combat_State == ECombat_State::ECS_Reloading && 
@@ -383,6 +460,7 @@ void UCombat_Component::Multicast_Fire_Implementation(const FVector_NetQuantize&
 		Character->Play_Fire_Montage(bAiming);
 		Equipped_Weapon->Fire(Trace_Hit_Target);
 		Combat_State = ECombat_State::ECS_Unoccupied;
+		return;
 	}
 
 	else if(Character && Combat_State == ECombat_State::ECS_Unoccupied)
@@ -459,10 +537,13 @@ void UCombat_Component::Trace_Under_Crosshairs(FHitResult& Trace_Hit_Result)
 }
 
 void UCombat_Component::Equip_Weapon(AWeapon* Weapon_To_Equip)
-{
+{	
+	//Safety && limiting checks
 	if(Character == nullptr || Weapon_To_Equip == nullptr || bSprinting) return;
+	//limiting checks
 	if(Combat_State != ECombat_State::ECS_Unoccupied) return;
-
+	
+	//If there is already a primary weapon equipped, "Equip_Secondary_Weapon", otherwise "Equip_Primary_Weapon"
 	if(Equipped_Weapon != nullptr && Secondary_Weapon == nullptr)
 	{
 		Equip_Secondary_Weapon(Weapon_To_Equip);
@@ -472,6 +553,9 @@ void UCombat_Component::Equip_Weapon(AWeapon* Weapon_To_Equip)
 		Equip_Primary_Weapon(Weapon_To_Equip);
 	}
 	
+	//Disable "bOrientRotationToMovement" to movement so the character doesn't 
+	//use the "W,A,S,D" keys to determine which direction is forward and enable "bUseControllerRotationYaw" 
+	//so the character uses the direction of the controller (mouse input) to determine which direction is forward.
 	Character->GetCharacterMovement()->bOrientRotationToMovement = false;
 	Character->bUseControllerRotationYaw = true;
 }
@@ -483,6 +567,7 @@ bool UCombat_Component::Should_Swap_Weapons()
 
 void UCombat_Component::Swap_Weapons()
 {
+	if(Combat_State != ECombat_State::ECS_Unoccupied) return;
 	AWeapon* Temporary_Weapon_Holder = Equipped_Weapon;
 	Equipped_Weapon = Secondary_Weapon;
 	Secondary_Weapon = Temporary_Weapon_Holder;
@@ -500,22 +585,34 @@ void UCombat_Component::Swap_Weapons()
 }
 
 void UCombat_Component::Equip_Primary_Weapon(AWeapon* Weapon_To_Equip)
-{
+{	
+	//Safety check
 	if(Weapon_To_Equip == nullptr) return;
 
+	//Drop primary weapon when trying to equip another weapon.
 	Drop_Equipped_Weapon();
+	//Assign "Weapon_To_Equip" which is passed in to the "Equipped_Weapon" pointer. 
 	Equipped_Weapon = Weapon_To_Equip;
+	//Set the weapon state for the weapon which was just passed into "Equipped_Weapon".
 	Equipped_Weapon->Set_Weapon_State(EWeaponState::EWS_Equipped);
+	//Attach the "Equipped_Weapon" to the socket which was set in the editor.
 	Attach_Actor_To_Right_Hand(Equipped_Weapon);
+	//Set the owner of the "AWeapon" to the "AShooter_Character" pawn which picked it up. 
+	//"SetOwner" is replicated using "OnRep_Owner()" (defined by Epic Games and can be overridden.).
 	Equipped_Weapon->SetOwner(Character);
+	//Set the HUD_Ammo for the weapon.
 	Equipped_Weapon->Set_HUD_Ammo();
+	//Update the carried ammo.
 	Update_Carried_Ammo();
+	//Play equip sound.
 	Play_Equip_Weapon_Sound(Weapon_To_Equip);
+	//If the magazine in the weapon which was picked up is empty automatically reload on pickup 
+	//if the "AShooter_Character" pawn is carrying the correct ammo type.
 	Reload_Empty_Magazine();
 }
 
 void UCombat_Component::Equip_Secondary_Weapon(AWeapon* Weapon_To_Equip)
-{
+{	
 	if(Weapon_To_Equip == nullptr) return;
 	Secondary_Weapon = Weapon_To_Equip;
 	Secondary_Weapon->Set_Weapon_State(EWeaponState::EWS_Equipped_Secondary);
@@ -534,9 +631,13 @@ void UCombat_Component::Drop_Equipped_Weapon()
 
 void UCombat_Component::Attach_Actor_To_Right_Hand(AActor* Actor_To_Attach)
 {
+	//Safety check
 	if(Character == nullptr || Character->GetMesh() == nullptr || Actor_To_Attach == nullptr) return;
 
+	//"GetSocketByName" returns a "const USkeletalMeshSocket"  
 	const USkeletalMeshSocket* Hand_Socket = Character->GetMesh()->GetSocketByName(FName("Right_Hand_Socket"));
+	
+	//Safety check
 	if(Hand_Socket)
 	{
 		Hand_Socket->AttachActor(Actor_To_Attach, Character->GetMesh());
